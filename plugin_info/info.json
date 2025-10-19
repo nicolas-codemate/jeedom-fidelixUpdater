@@ -1,0 +1,33 @@
+{
+	"id": "fidelixUpdater",
+	"name": "Fidelix Updater",
+	"pluginVersion": "1.0.0",
+	"description": {
+		"fr_FR": "Plugin pour mettre à jour le firmware et software des modules Fidelix Multi24 via Modbus RTU",
+		"en_US": "Plugin to update firmware and software of Fidelix Multi24 modules via Modbus RTU"
+	},
+	"licence": "AGPL-3.0",
+	"author": "Codemate SARL",
+	"require": "4.2",
+	"category": "programming",
+	"hasDependency": false,
+	"hasOwnDeamon": false,
+	"maxDependancyInstallTime": 0,
+	"changelog": "https://github.com/yourusername/fidelixUpdater/changelog",
+	"documentation": "https://github.com/yourusername/fidelixUpdater/docs",
+	"link": {
+		"forum": "",
+		"video": ""
+	},
+	"language": [
+		"fr_FR",
+		"en_US",
+		"es_ES",
+		"de_DE"
+	],
+	"compatibility": [
+		"smart",
+		"luna",
+		"atlas"
+	]
+}

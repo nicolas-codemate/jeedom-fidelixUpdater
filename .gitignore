@@ -1,0 +1,44 @@
+# Sensitive documentation (C# code, customer emails, internal dev docs)
+docs/context/
+CLAUDE.md
+
+# Firmware and software files (potentially sensitive)
+*.hex
+*.HEX
+*.M24IEC
+*.m24iec
+
+# Data directories (runtime files)
+data/filetransfer/*
+data/status/*
+data/logs/*
+data/*.js
+!data/.gitkeep
+
+# Node modules
+3rdparty/Fidelix/FxLib/node_modules/
+3rdparty/Fidelix/FxLib/package-lock.json
+
+# Logs
+3rdparty/Fidelix/FxLib/logsJeedom.txt
+3rdparty/Fidelix/FxLib/*.log
+*.log
+
+# Python virtual environment
+resources/python_venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
