@@ -23,7 +23,7 @@ try {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }
 
-    ajax::init(['uploadFirmware', 'uploadSoftware']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'testConnection']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -260,6 +260,117 @@ JSCODE;
         log::add('fidelixUpdater', 'debug', 'Cleanup effectué pour updateId: ' . $updateId . ' - Fichiers supprimés: ' . implode(', ', $deleted));
 
         ajax::success(array('deleted' => $deleted));
+    }
+
+    // ========================================
+    // ACTION: testConnection
+    // ========================================
+    if (init('action') == 'testConnection') {
+        $port = init('port');
+        $address = (int)init('address');
+
+        if (empty($port)) {
+            throw new Exception('Port série non spécifié');
+        }
+
+        if (empty($address) || $address < 1 || $address > 247) {
+            throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
+        }
+
+        log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address);
+
+        // Check Node.js installation
+        $nodeVersion = shell_exec('node -v 2>&1');
+        $nodeInstalled = !empty($nodeVersion) && strpos($nodeVersion, 'v') === 0;
+
+        // Check port permissions
+        $portPermissions = array(
+            'exists' => file_exists($port),
+            'readable' => is_readable($port),
+            'writable' => is_writable($port)
+        );
+
+        // Check if www-data is in dialout group
+        $groups = shell_exec('groups www-data 2>&1');
+        $hasDialoutPermission = strpos($groups, 'dialout') !== false;
+
+        $diagnostics = array(
+            'nodejs' => array(
+                'installed' => $nodeInstalled,
+                'version' => trim($nodeVersion)
+            ),
+            'port' => array(
+                'path' => $port,
+                'exists' => $portPermissions['exists'],
+                'readable' => $portPermissions['readable'],
+                'writable' => $portPermissions['writable']
+            ),
+            'permissions' => array(
+                'wwwDataInDialout' => $hasDialoutPermission,
+                'groups' => trim($groups)
+            )
+        );
+
+        // If basic checks fail, return early
+        if (!$nodeInstalled) {
+            ajax::success(array(
+                'success' => false,
+                'error' => 'Node.js n\'est pas installé sur le système',
+                'diagnostics' => $diagnostics,
+                'moduleInfo' => null
+            ));
+            return;
+        }
+
+        if (!$portPermissions['exists']) {
+            ajax::success(array(
+                'success' => false,
+                'error' => 'Le port série n\'existe pas : ' . $port,
+                'diagnostics' => $diagnostics,
+                'moduleInfo' => null
+            ));
+            return;
+        }
+
+        // Generate unique test ID
+        $testId = uniqid('test_', true);
+        $resultFile = '/srv/plugins/fidelixUpdater/data/test_result_' . $testId . '.json';
+        $scriptPath = '/srv/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib/testConnection.js';
+
+        // Run test script (synchronous - wait for result)
+        $cmd = "sudo /usr/bin/node " . escapeshellarg($scriptPath) . " " .
+               escapeshellarg($port) . " " .
+               escapeshellarg($address) . " " .
+               escapeshellarg($resultFile) . " 2>&1";
+
+        $output = array();
+        $returnCode = 0;
+        exec($cmd, $output, $returnCode);
+
+        log::add('fidelixUpdater', 'debug', 'Test command executed - Return code: ' . $returnCode);
+
+        // Read result file
+        if (file_exists($resultFile)) {
+            $testResult = json_decode(file_get_contents($resultFile), true);
+            @unlink($resultFile); // Cleanup
+
+            if ($testResult) {
+                // Merge diagnostics
+                $testResult['diagnostics'] = array_merge($diagnostics, $testResult['diagnostics']);
+
+                ajax::success($testResult);
+                return;
+            }
+        }
+
+        // If we get here, test failed to produce a result
+        ajax::success(array(
+            'success' => false,
+            'error' => 'Le test n\'a pas pu être exécuté. Vérifiez les logs.',
+            'diagnostics' => $diagnostics,
+            'moduleInfo' => null,
+            'output' => implode("\n", $output)
+        ));
     }
 
     throw new Exception(__('Aucune méthode correspondante à', __FILE__) . ' : ' . init('action'));
