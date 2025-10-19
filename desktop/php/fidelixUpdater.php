@@ -17,7 +17,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
             <div class="cursor logoPrimary" id="bt_openUpdateModal">
                 <i class="fas fa-upload"></i>
                 <br />
-                <span>{{Mettre à jour Firmware/Software}}</span>
+                <span>{{Mettre à jour}}</span>
+            </div>
+            <div class="cursor logoSecondary" id="bt_openTestModal">
+                <i class="fas fa-plug"></i>
+                <br />
+                <span>{{Tester la connexion}}</span>
             </div>
         </div>
 
@@ -66,5 +71,14 @@ $('#bt_openUpdateModal').on('click', function() {
         height: 600
     });
     $('#md_modal').load('index.php?v=d&plugin=fidelixUpdater&modal=modal.update').dialog('open');
+});
+
+$('#bt_openTestModal').on('click', function() {
+    $('#md_modal').dialog({
+        title: "{{Test de connexion}}",
+        width: 900,
+        height: 700
+    });
+    $('#md_modal').load('index.php?v=d&plugin=fidelixUpdater&modal=modal.test').dialog('open');
 });
 </script>
