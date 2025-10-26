@@ -199,10 +199,29 @@ $(function() {
             ? '{{La connexion au module Fidelix Multi24 fonctionne correctement.}}'
             : (result.error || '{{Impossible de se connecter au module.}}');
 
+        // Check if permissions fix is needed
+        const needsPermissionFix = !result.success && result.diagnostics && (
+            !result.diagnostics.permissions?.wwwDataInDialout ||
+            !result.diagnostics.port?.readable ||
+            !result.diagnostics.port?.writable
+        );
+
+        let fixButton = '';
+        if (needsPermissionFix) {
+            fixButton = `
+                <hr>
+                <button class="btn btn-warning" id="btnFixNow">
+                    <i class="fas fa-wrench"></i> {{Corriger les permissions maintenant}}
+                </button>
+                <span id="fixNowStatus" style="margin-left: 10px;"></span>
+            `;
+        }
+
         $('#testResultAlert').html(`
             <div class="alert ${alertClass}">
                 <h4><i class="fas ${alertIcon}"></i> ${alertTitle}</h4>
                 <p>${alertMessage}</p>
+                ${fixButton}
             </div>
         `);
 
@@ -281,6 +300,45 @@ $(function() {
         } else {
             $('#errorDetailsPanel').hide();
         }
+
+        // Attach handler for fix button (if it exists)
+        $('#btnFixNow').off('click').on('click', function() {
+            const $btn = $(this);
+            const $status = $('#fixNowStatus');
+
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> {{Correction en cours...}}');
+            $status.html('');
+
+            $.ajax({
+                type: 'POST',
+                url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php',
+                data: {
+                    action: 'fixPermissions'
+                },
+                dataType: 'json',
+                timeout: 60000,
+                success: function(data) {
+                    $btn.prop('disabled', false).html('<i class="fas fa-wrench"></i> {{Corriger les permissions maintenant}}');
+
+                    if (data.state === 'ok' && data.result.success) {
+                        $status.html('<span class="label label-success"><i class="fas fa-check"></i> Corrigé !</span>');
+                        $('#notify').showAlert({message: '{{Permissions corrigées ! Relancez le test...}}', level: 'success'});
+
+                        // Re-enable and highlight test button
+                        $('#btnRunTest').removeClass('btn-default').addClass('btn-success').effect('highlight', {}, 2000);
+                    } else {
+                        const errorMsg = data.result.error || 'Erreur inconnue';
+                        $status.html('<span class="label label-danger"><i class="fas fa-times"></i> Échec</span>');
+                        $('#notify').showAlert({message: '{{Erreur}} : ' + errorMsg, level: 'danger'});
+                    }
+                },
+                error: function(xhr, status, error) {
+                    $btn.prop('disabled', false).html('<i class="fas fa-wrench"></i> {{Corriger les permissions maintenant}}');
+                    $status.html('<span class="label label-danger"><i class="fas fa-times"></i> Échec</span>');
+                    $('#notify').showAlert({message: '{{Erreur}} : ' + error, level: 'danger'});
+                }
+            });
+        });
     }
 });
 </script>

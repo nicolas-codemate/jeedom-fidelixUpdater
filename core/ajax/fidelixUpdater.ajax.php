@@ -23,7 +23,7 @@ try {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'testConnection']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'testConnection', 'fixPermissions']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -371,6 +371,42 @@ JSCODE;
             'moduleInfo' => null,
             'output' => implode("\n", $output)
         ));
+    }
+
+    // ========================================
+    // ACTION: fixPermissions
+    // ========================================
+    if (init('action') == 'fixPermissions') {
+        log::add('fidelixUpdater', 'info', 'Reconfiguration des permissions demandée');
+
+        $fixScript = '/srv/plugins/fidelixUpdater/resources/fix-permissions.sh';
+
+        if (!file_exists($fixScript)) {
+            throw new Exception('Script de correction non trouvé : ' . $fixScript);
+        }
+
+        // Execute fix script
+        $cmd = "sudo bash " . escapeshellarg($fixScript) . " 2>&1";
+        $output = array();
+        $returnCode = 0;
+
+        exec($cmd, $output, $returnCode);
+
+        $result = array(
+            'success' => ($returnCode === 0),
+            'returnCode' => $returnCode,
+            'output' => implode("\n", $output)
+        );
+
+        if ($returnCode === 0) {
+            log::add('fidelixUpdater', 'info', 'Reconfiguration réussie');
+        } else {
+            log::add('fidelixUpdater', 'error', 'Échec de la reconfiguration - Code: ' . $returnCode);
+            log::add('fidelixUpdater', 'debug', 'Output: ' . implode("\n", $output));
+            $result['error'] = 'La reconfiguration a échoué (code: ' . $returnCode . ')';
+        }
+
+        ajax::success($result);
     }
 
     throw new Exception(__('Aucune méthode correspondante à', __FILE__) . ' : ' . init('action'));

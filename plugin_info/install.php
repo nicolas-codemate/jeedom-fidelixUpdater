@@ -19,8 +19,13 @@ require_once dirname(__FILE__) . '/../../../core/php/core.inc.php';
 
 // Fonction exécutée automatiquement après l'installation du plugin
 function fidelixUpdater_install() {
-    // Créer les répertoires nécessaires
-    $dataDir = dirname(__FILE__) . '/../data';
+    $pluginDir = dirname(__FILE__) . '/..';
+    $fixScript = $pluginDir . '/resources/fix-permissions.sh';
+
+    log::add('fidelixUpdater', 'info', 'Starting plugin installation/configuration...');
+
+    // Créer les répertoires nécessaires (au cas où le script échoue)
+    $dataDir = $pluginDir . '/data';
     if (!file_exists($dataDir . '/filetransfer')) {
         mkdir($dataDir . '/filetransfer', 0775, true);
     }
@@ -30,6 +35,31 @@ function fidelixUpdater_install() {
     if (!file_exists($dataDir . '/logs')) {
         mkdir($dataDir . '/logs', 0775, true);
     }
+
+    log::add('fidelixUpdater', 'debug', 'Directories created');
+
+    // Execute fix-permissions script if it exists
+    if (file_exists($fixScript)) {
+        log::add('fidelixUpdater', 'info', 'Running permissions configuration script...');
+
+        $cmd = "sudo bash " . escapeshellarg($fixScript) . " 2>&1";
+        $output = array();
+        $returnCode = 0;
+
+        exec($cmd, $output, $returnCode);
+
+        if ($returnCode === 0) {
+            log::add('fidelixUpdater', 'info', 'Permissions configured successfully');
+            log::add('fidelixUpdater', 'debug', 'Script output: ' . implode("\n", $output));
+        } else {
+            log::add('fidelixUpdater', 'warning', 'Permissions script returned non-zero exit code: ' . $returnCode);
+            log::add('fidelixUpdater', 'warning', 'Output: ' . implode("\n", $output));
+        }
+    } else {
+        log::add('fidelixUpdater', 'warning', 'Permissions script not found at: ' . $fixScript);
+    }
+
+    log::add('fidelixUpdater', 'info', 'Plugin installation completed');
 }
 
 // Fonction exécutée automatiquement après la mise à jour du plugin
