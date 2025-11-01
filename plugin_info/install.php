@@ -42,7 +42,7 @@ function fidelixUpdater_install() {
     if (file_exists($fixScript)) {
         log::add('fidelixUpdater', 'info', 'Running permissions configuration script...');
 
-        $cmd = "sudo bash " . escapeshellarg($fixScript) . " 2>&1";
+        $cmd = system::getCmdSudo() . " bash " . escapeshellarg($fixScript) . " 2>&1";
         $output = array();
         $returnCode = 0;
 
@@ -57,6 +57,15 @@ function fidelixUpdater_install() {
         }
     } else {
         log::add('fidelixUpdater', 'warning', 'Permissions script not found at: ' . $fixScript);
+    }
+
+    // Enregistrer le plugin dans la table update de Jeedom
+    try {
+        log::add('fidelixUpdater', 'info', 'Registering plugin in Jeedom update system...');
+        update::findNewUpdateObject();
+        log::add('fidelixUpdater', 'info', 'Plugin registered successfully');
+    } catch (Exception $e) {
+        log::add('fidelixUpdater', 'error', 'Failed to register plugin: ' . $e->getMessage());
     }
 
     log::add('fidelixUpdater', 'info', 'Plugin installation completed');

@@ -190,7 +190,7 @@ JSCODE;
         file_put_contents($scriptPath, $jsCode);
 
         // Launch Node.js in BACKGROUND (non-blocking) with '&'
-        $cmd = "sudo /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 &";
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 &";
         exec($cmd);
 
         log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan');
@@ -338,7 +338,7 @@ JSCODE;
         $scriptPath = '/srv/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib/testConnection.js';
 
         // Run test script (synchronous - wait for result)
-        $cmd = "sudo /usr/bin/node " . escapeshellarg($scriptPath) . " " .
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
                escapeshellarg($port) . " " .
                escapeshellarg($address) . " " .
                escapeshellarg($resultFile) . " 2>&1";
@@ -386,7 +386,7 @@ JSCODE;
         }
 
         // Execute fix script
-        $cmd = "sudo bash " . escapeshellarg($fixScript) . " 2>&1";
+        $cmd = system::getCmdSudo() . " bash " . escapeshellarg($fixScript) . " 2>&1";
         $output = array();
         $returnCode = 0;
 

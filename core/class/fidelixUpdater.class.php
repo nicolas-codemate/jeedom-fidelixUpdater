@@ -22,6 +22,69 @@ class fidelixUpdater extends eqLogic {
 
     /*     * ***********************Methodes statiques*************************** */
 
+    /**
+     * Check if dependencies are installed and up to date
+     *
+     * @return array Status information about dependencies
+     */
+    public static function dependancy_info() {
+        $return = array();
+        $return['log'] = 'fidelixUpdater_dep';
+        $return['progress_file'] = jeedom::getTmpFolder('fidelixUpdater') . '/dependancy';
+        $return['state'] = 'ok';
+
+        // Check if NodeJS is installed
+        exec('which node 2>&1', $output, $returnCode);
+        if ($returnCode !== 0) {
+            $return['state'] = 'nok';
+            log::add('fidelixUpdater', 'debug', 'NodeJS not found');
+            return $return;
+        }
+
+        // Check NodeJS version
+        exec('node -v 2>&1', $nodeVersion, $returnCode);
+        if ($returnCode !== 0 || empty($nodeVersion)) {
+            $return['state'] = 'nok';
+            log::add('fidelixUpdater', 'debug', 'Unable to get NodeJS version');
+            return $return;
+        }
+
+        $version = trim($nodeVersion[0]);
+        log::add('fidelixUpdater', 'debug', 'Found NodeJS version: ' . $version);
+
+        // Check if version is >= v20
+        if (version_compare($version, 'v20', '<')) {
+            $return['state'] = 'nok';
+            log::add('fidelixUpdater', 'debug', 'NodeJS version too old (need v20+, found ' . $version . ')');
+            return $return;
+        }
+
+        log::add('fidelixUpdater', 'debug', 'Dependencies check: OK');
+        return $return;
+    }
+
+    /**
+     * Install plugin dependencies
+     *
+     * @return array Information about the installation script
+     */
+    public static function dependancy_install() {
+        log::add('fidelixUpdater', 'info', 'Starting dependencies installation');
+
+        $resourcePath = realpath(__DIR__ . '/../../resources');
+        $progressFile = jeedom::getTmpFolder('fidelixUpdater') . '/dependancy';
+
+        // Ensure tmp folder exists
+        if (!file_exists(jeedom::getTmpFolder('fidelixUpdater'))) {
+            mkdir(jeedom::getTmpFolder('fidelixUpdater'), 0755, true);
+        }
+
+        return array(
+            'script' => $resourcePath . '/install_apt.sh',
+            'log' => 'fidelixUpdater_dep'
+        );
+    }
+
     /*     * *********************Méthodes d'instance************************* */
 
     public function preInsert() {

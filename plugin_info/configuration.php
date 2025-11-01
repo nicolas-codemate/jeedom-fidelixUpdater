@@ -88,8 +88,12 @@ $allOk = $diagnostics['nodejs']['installed'] &&
     background-color: #f9f9f9;
 }
 .diagnostic-item.success {
-    border-left-color: #5cb85c;
+    border-left-color: #d6e9c6;
     background-color: #dff0d8;
+    color: #3c763d;
+}
+.diagnostic-item.success strong {
+    color: #2b542c;
 }
 .diagnostic-item.warning {
     border-left-color: #f0ad4e;
@@ -149,12 +153,12 @@ $allOk = $diagnostics['nodejs']['installed'] &&
                 <div class="diagnostic-item <?php echo $diagnostics['nodejs']['installed'] ? 'success' : 'error'; ?>">
                     <span class="diagnostic-icon">
                         <?php if ($diagnostics['nodejs']['installed']): ?>
-                            <i class="fas fa-check-circle" style="color: #5cb85c;"></i>
+                            <i class="fas fa-check-circle" style="color: #3c763d;"></i>
                         <?php else: ?>
                             <i class="fas fa-times-circle" style="color: #d9534f;"></i>
                         <?php endif; ?>
                     </span>
-                    <strong><?php echo $diagnostics['nodejs']['label']; ?></strong>
+                    <strong style="color:black;"><?php echo $diagnostics['nodejs']['label']; ?></strong>
                     <div style="margin-left: 40px;">
                         <?php if ($diagnostics['nodejs']['installed']): ?>
                             Version: <code><?php echo htmlspecialchars($diagnostics['nodejs']['version']); ?></code>
@@ -168,7 +172,7 @@ $allOk = $diagnostics['nodejs']['installed'] &&
                 <div class="diagnostic-item <?php echo $diagnostics['dialout']['ok'] ? 'success' : 'warning'; ?>">
                     <span class="diagnostic-icon">
                         <?php if ($diagnostics['dialout']['ok']): ?>
-                            <i class="fas fa-check-circle" style="color: #5cb85c;"></i>
+                            <i class="fas fa-check-circle" style="color: #3c763d;"></i>
                         <?php else: ?>
                             <i class="fas fa-exclamation-triangle" style="color: #f0ad4e;"></i>
                         <?php endif; ?>
@@ -183,7 +187,7 @@ $allOk = $diagnostics['nodejs']['installed'] &&
                 <div class="diagnostic-item <?php echo $diagnostics['npm']['installed'] ? 'success' : 'warning'; ?>">
                     <span class="diagnostic-icon">
                         <?php if ($diagnostics['npm']['installed']): ?>
-                            <i class="fas fa-check-circle" style="color: #5cb85c;"></i>
+                            <i class="fas fa-check-circle" style="color: #3c763d;"></i>
                         <?php else: ?>
                             <i class="fas fa-exclamation-triangle" style="color: #f0ad4e;"></i>
                         <?php endif; ?>
@@ -202,7 +206,7 @@ $allOk = $diagnostics['nodejs']['installed'] &&
                 <div class="diagnostic-item <?php echo ($diagnostics['serial']['count'] > 0) ? 'success' : 'warning'; ?>">
                     <span class="diagnostic-icon">
                         <?php if ($diagnostics['serial']['count'] > 0): ?>
-                            <i class="fas fa-check-circle" style="color: #5cb85c;"></i>
+                            <i class="fas fa-check-circle" style="color: #3c763d;"></i>
                         <?php else: ?>
                             <i class="fas fa-info-circle" style="color: #5bc0de;"></i>
                         <?php endif; ?>
@@ -240,7 +244,7 @@ $allOk = $diagnostics['nodejs']['installed'] &&
                     <li>{{Les dépendances npm installées (serialport, q, fs-extra)}}</li>
                     <li>{{Un adaptateur USB-RS485 pour communiquer avec les modules Fidelix}}</li>
                 </ul>
-                <p class="small text-muted">{{Le bouton "Reconfigurer les permissions" exécute automatiquement toutes les étapes nécessaires.}}</p>
+                <p class="small">{{Le bouton "Reconfigurer les permissions" exécute automatiquement toutes les étapes nécessaires.}}</p>
             </div>
         </div>
     </fieldset>
