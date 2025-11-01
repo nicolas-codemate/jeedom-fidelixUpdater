@@ -10,9 +10,9 @@
 	"author": "Codemate SARL",
 	"require": "4.2",
 	"category": "programming",
-	"hasDependency": false,
+	"hasDependency": true,
 	"hasOwnDeamon": false,
-	"maxDependancyInstallTime": 0,
+	"maxDependancyInstallTime": 10,
 	"changelog": "https://github.com/yourusername/fidelixUpdater/changelog",
 	"documentation": "https://github.com/yourusername/fidelixUpdater/docs",
 	"link": {
