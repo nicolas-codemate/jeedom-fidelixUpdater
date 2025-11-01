@@ -23,7 +23,7 @@ try {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'testConnection', 'fixPermissions']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'testConnection', 'fixPermissions']);
 
     // ========================================
     // ACTION: uploadFirmware

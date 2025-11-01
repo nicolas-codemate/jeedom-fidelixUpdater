@@ -16,17 +16,18 @@ log "========================================="
 log "Starting Fidelix Updater permissions fix"
 log "========================================="
 
-# Step 1: Add www-data to dialout group
-log "Step 1: Adding www-data to dialout group..."
+# Step 1: Verify www-data is in dialout group
+log "Step 1: Verifying www-data group permissions..."
 if groups www-data | grep -q '\bdialout\b'; then
-    log "✓ www-data already in dialout group"
+    log "✓ www-data is in dialout group"
 else
+    log "⚠ www-data is NOT in dialout group - attempting to add..."
     usermod -a -G dialout www-data
     if [ $? -eq 0 ]; then
-        log "✓ www-data added to dialout group successfully"
+        log "✓ www-data added to dialout group"
+        log "⚠ NOTE: You may need to restart the PHP-FPM service for changes to take effect"
     else
-        log "✗ Failed to add www-data to dialout group"
-        exit 1
+        log "✗ Failed to add www-data to dialout group (this may require manual intervention)"
     fi
 fi
 
@@ -46,13 +47,17 @@ if [ -d "$PLUGIN_DIR/3rdparty/Fidelix/FxLib" ]; then
 
     if [ -f "package.json" ]; then
         if [ ! -d "node_modules" ]; then
-            log "Installing npm packages..."
-            npm install --silent 2>&1 | tee -a "$LOG_FILE"
-            if [ $? -eq 0 ]; then
-                log "✓ Node.js dependencies installed successfully"
+            if command -v npm >/dev/null 2>&1; then
+                log "Installing npm packages..."
+                npm install --silent 2>&1 | tee -a "$LOG_FILE"
+                if [ $? -eq 0 ]; then
+                    log "✓ Node.js dependencies installed successfully"
+                else
+                    log "⚠ Failed to install Node.js dependencies (npm returned error)"
+                fi
             else
-                log "✗ Failed to install Node.js dependencies"
-                exit 1
+                log "⚠ npm command not found - Node.js dependencies not installed"
+                log "  Please install Node.js and npm manually, then run this script again"
             fi
         else
             log "✓ Node.js dependencies already installed"
@@ -74,15 +79,6 @@ if [ -n "$SERIAL_PORTS" ]; then
     done
 else
     log "⚠ No serial ports detected (this is normal if no USB device is connected)"
-fi
-
-# Step 5: Reload PHP-FPM to apply group changes
-log "Step 5: Reloading PHP-FPM..."
-if command -v php-fpm >/dev/null 2>&1; then
-    pkill -USR2 php-fpm 2>/dev/null || true
-    log "✓ PHP-FPM reload signal sent"
-else
-    log "⚠ php-fpm not found, restart manually if needed"
 fi
 
 log "========================================="
