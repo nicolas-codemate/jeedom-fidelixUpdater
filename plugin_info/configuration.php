@@ -23,53 +23,12 @@ if (!isConnect()) {
     die();
 }
 
-// Gather system diagnostics
-$diagnostics = array();
+// Load helper class
+require_once dirname(__FILE__) . '/../core/class/fidelixUpdaterHelper.class.php';
 
-// Check Node.js
-$nodeVersion = shell_exec('node -v 2>&1');
-$diagnostics['nodejs'] = array(
-    'installed' => !empty($nodeVersion) && strpos($nodeVersion, 'v') === 0,
-    'version' => trim($nodeVersion),
-    'label' => 'Node.js'
-);
-
-// Check www-data in dialout group
-$groups = shell_exec('groups www-data 2>&1');
-$diagnostics['dialout'] = array(
-    'ok' => strpos($groups, 'dialout') !== false,
-    'groups' => trim($groups),
-    'label' => 'Permissions (www-data dans groupe dialout)'
-);
-
-// Check npm dependencies
-$nodeModulesPath = dirname(__FILE__) . '/../3rdparty/Fidelix/FxLib/node_modules';
-$diagnostics['npm'] = array(
-    'installed' => file_exists($nodeModulesPath) && is_dir($nodeModulesPath),
-    'path' => $nodeModulesPath,
-    'label' => 'Dépendances Node.js (npm)'
-);
-
-// Check serial ports
-$serialPorts = array();
-$usbMapping = jeedom::getUsbMapping('', true);
-if (is_array($usbMapping)) {
-    foreach ($usbMapping as $port => $description) {
-        $readable = is_readable($port);
-        $writable = is_writable($port);
-        $serialPorts[$port] = array(
-            'description' => $description,
-            'readable' => $readable,
-            'writable' => $writable,
-            'ok' => $readable && $writable
-        );
-    }
-}
-$diagnostics['serial'] = array(
-    'ports' => $serialPorts,
-    'count' => count($serialPorts),
-    'label' => 'Ports série détectés'
-);
+// Gather system diagnostics using helper
+$diagnostics = fidelixUpdaterHelper::getSystemDiagnostics();
+$serialPorts = $diagnostics['serial']['ports'];
 
 // Overall status
 $allOk = $diagnostics['nodejs']['installed'] &&

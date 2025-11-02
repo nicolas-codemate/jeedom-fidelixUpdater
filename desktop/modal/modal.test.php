@@ -34,10 +34,15 @@ if (!isConnect('admin')) {
                 <label>{{Port série}}</label>
                 <select class="form-control" id="testSerialPort">
                     <?php
-                    $usbMapping = jeedom::getUsbMapping('', true);
-                    if (is_array($usbMapping)) {
-                        foreach ($usbMapping as $key => $value) {
-                            echo '<option value="' . $key . '">' . $key . ' (' . $value . ')</option>';
+                    // Load helper class
+                    require_once dirname(__FILE__) . '/../../core/class/fidelixUpdaterHelper.class.php';
+
+                    // Get serial ports with normalized [port => description] mapping
+                    $serialPorts = fidelixUpdaterHelper::getSerialPorts(true);
+                    if (is_array($serialPorts)) {
+                        foreach ($serialPorts as $port => $description) {
+                            // Display: /dev/ttyS0 (Cubiboard)
+                            echo '<option value="' . htmlspecialchars($port) . '">' . htmlspecialchars($port) . ' (' . htmlspecialchars($description) . ')</option>';
                         }
                     }
                     ?>

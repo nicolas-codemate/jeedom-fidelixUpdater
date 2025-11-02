@@ -23,6 +23,9 @@ try {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }
 
+    // Load helper class
+    require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
+
     ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'testConnection', 'fixPermissions']);
 
     // ========================================
@@ -280,19 +283,17 @@ JSCODE;
         log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address);
 
         // Check Node.js installation
-        $nodeVersion = shell_exec('node -v 2>&1');
-        $nodeInstalled = !empty($nodeVersion) && strpos($nodeVersion, 'v') === 0;
+        $nodejs = fidelixUpdaterHelper::checkNodeJs();
+        $nodeInstalled = $nodejs['installed'];
+        $nodeVersion = $nodejs['version'];
 
-        // Check port permissions
-        $portPermissions = array(
-            'exists' => file_exists($port),
-            'readable' => is_readable($port),
-            'writable' => is_writable($port)
-        );
+        // Check port permissions (Unix-level only, no I/O test)
+        $portPermissions = fidelixUpdaterHelper::checkPortPermissions($port);
 
         // Check if www-data is in dialout group
-        $groups = shell_exec('groups www-data 2>&1');
-        $hasDialoutPermission = strpos($groups, 'dialout') !== false;
+        $dialout = fidelixUpdaterHelper::checkDialoutGroup();
+        $hasDialoutPermission = $dialout['inDialout'];
+        $groups = $dialout['groups'];
 
         $diagnostics = array(
             'nodejs' => array(
@@ -303,7 +304,8 @@ JSCODE;
                 'path' => $port,
                 'exists' => $portPermissions['exists'],
                 'readable' => $portPermissions['readable'],
-                'writable' => $portPermissions['writable']
+                'writable' => $portPermissions['writable'],
+                'checkMethod' => $portPermissions['reason']
             ),
             'permissions' => array(
                 'wwwDataInDialout' => $hasDialoutPermission,
@@ -326,6 +328,17 @@ JSCODE;
             ajax::success(array(
                 'success' => false,
                 'error' => 'Le port série n\'existe pas : ' . $port,
+                'diagnostics' => $diagnostics,
+                'moduleInfo' => null
+            ));
+            return;
+        }
+
+        // If permissions are not OK, return early with clear error message
+        if (!$portPermissions['readable'] || !$portPermissions['writable']) {
+            ajax::success(array(
+                'success' => false,
+                'error' => 'Permissions insuffisantes sur le port série. L\'utilisateur www-data doit être dans le groupe dialout.',
                 'diagnostics' => $diagnostics,
                 'moduleInfo' => null
             ));
