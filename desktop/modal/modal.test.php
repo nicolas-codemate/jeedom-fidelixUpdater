@@ -55,6 +55,18 @@ if (!isConnect('admin')) {
             </div>
 
             <div class="form-group">
+                <label>{{Vitesse de communication (Baud Rate)}}</label>
+                <select class="form-control" id="testBaudRate">
+                    <option value="9600">9600</option>
+                    <option value="19200" selected>19200</option>
+                    <option value="38400">38400</option>
+                    <option value="57600">57600</option>
+                    <option value="115200">115200</option>
+                </select>
+                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 19200 pour Multi24)}}</small>
+            </div>
+
+            <div class="form-group">
                 <button class="btn btn-success btn-lg btn-block" id="btnRunTest">
                     <i class="fas fa-play"></i> {{Lancer le test}}
                 </button>
@@ -71,7 +83,7 @@ if (!isConnect('admin')) {
                     <li>{{Connexion Modbus RTU au module}}</li>
                     <li>{{Communication avec le module à l'adresse spécifiée}}</li>
                 </ul>
-                <p class="small text-muted">{{Le test prend environ 5-10 secondes.}}</p>
+                <p class="small">{{Le test prend environ 5-10 secondes.}}</p>
             </div>
         </div>
     </div>
@@ -147,6 +159,7 @@ $(function() {
     $('#btnRunTest').on('click', function() {
         const port = $('#testSerialPort').val();
         const address = parseInt($('#testDeviceAddress').val());
+        const baudRate = parseInt($('#testBaudRate').val());
 
         // Validate inputs
         if (!port) {
@@ -172,7 +185,8 @@ $(function() {
             data: {
                 action: 'testConnection',
                 port: port,
-                address: address
+                address: address,
+                baudRate: baudRate
             },
             dataType: 'json',
             timeout: 15000, // 15 second timeout

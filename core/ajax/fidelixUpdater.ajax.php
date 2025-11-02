@@ -119,6 +119,7 @@ try {
         $address = (int)init('address');
         $subaddress = init('subaddress') ? (int)init('subaddress') : null;
         $port = init('port');
+        $baudRate = (int)init('baudRate', 19200);
         $filename = init('filename');
         $method = init('method');
 
@@ -150,7 +151,7 @@ try {
         if ($subaddress !== null) {
             $logMsg .= ', Subaddress: ' . $subaddress . ' (pass-through mode)';
         }
-        $logMsg .= ', Method: ' . $method . ', File: ' . $filename;
+        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filename;
         log::add('fidelixUpdater', 'info', $logMsg);
 
         // Initialize status file
@@ -175,7 +176,7 @@ const options = {
 {$subaddressLine}
     type: '{$method}',
     port: '{$port}',
-    baudRate: 57600,
+    baudRate: {$baudRate},
     statusFile: '{$statusFile}'
 };
 
@@ -271,6 +272,7 @@ JSCODE;
     if (init('action') == 'testConnection') {
         $port = init('port');
         $address = (int)init('address');
+        $baudRate = (int)init('baudRate', 19200);
 
         if (empty($port)) {
             throw new Exception('Port série non spécifié');
@@ -280,7 +282,7 @@ JSCODE;
             throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
         }
 
-        log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address);
+        log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address . ', BaudRate: ' . $baudRate);
 
         // Check Node.js installation
         $nodejs = fidelixUpdaterHelper::checkNodeJs();
@@ -354,6 +356,7 @@ JSCODE;
         $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
                escapeshellarg($port) . " " .
                escapeshellarg($address) . " " .
+               escapeshellarg($baudRate) . " " .
                escapeshellarg($resultFile) . " 2>&1";
 
         $output = array();

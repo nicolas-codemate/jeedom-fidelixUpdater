@@ -78,6 +78,18 @@ if (!isConnect('admin')) {
             </div>
 
             <div class="form-group">
+                <label>{{Vitesse de communication (Baud Rate)}}</label>
+                <select class="form-control" id="baudRate">
+                    <option value="9600">9600</option>
+                    <option value="19200" selected>19200</option>
+                    <option value="38400">38400</option>
+                    <option value="57600">57600</option>
+                    <option value="115200">115200</option>
+                </select>
+                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 19200 pour Multi24)}}</small>
+            </div>
+
+            <div class="form-group">
                 <button class="btn btn-success btn-lg btn-block" id="btnStartUpdate">
                     <i class="fas fa-play"></i> {{Démarrer la mise à jour}}
                 </button>
@@ -229,6 +241,7 @@ $(function() {
             return;
         }
 
+        const baudRate = parseInt($('#baudRate').val());
         const method = $('#updateType').val();
 
         // Disable start button
@@ -239,6 +252,7 @@ $(function() {
             action: 'startUpdate',
             address: address,
             port: port,
+            baudRate: baudRate,
             filename: uploadedFilename,
             method: method
         };

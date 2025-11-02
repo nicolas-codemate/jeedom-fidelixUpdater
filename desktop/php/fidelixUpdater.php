@@ -50,7 +50,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <li>{{Mise à jour software (fichier .M24IEC)}}</li>
                 <li>{{Suivi de progression en temps réel}}</li>
                 <li>{{Mécanisme de récupération automatique en cas d'échec}}</li>
-                <li>{{Support Modbus RTU sur RS485 (57600 bauds)}}</li>
+                <li>{{Support Modbus RTU sur RS485 (vitesse configurable : 9600-115200 bauds)}}</li>
             </ul>
 
             <h5><i class="fas fa-wrench"></i> {{Configuration requise}}</h5>

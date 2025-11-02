@@ -2,6 +2,7 @@
 'use strict';
 
 const FxDevice = require('./FxMulti24/FxDevice.js');
+const Q = require('q');
 const fs = require('fs-extra');
 
 // Create device instance
@@ -9,20 +10,22 @@ const fxDevice = new FxDevice();
 
 // Get arguments from command line
 const args = process.argv.slice(2);
-if (args.length < 3) {
-    console.error('Usage: node testConnection.js <port> <address> <resultFile>');
+if (args.length < 4) {
+    console.error('Usage: node testConnection.js <port> <address> <baudRate> <resultFile>');
     process.exit(1);
 }
 
 const port = args[0];
 const address = parseInt(args[1]);
-const resultFile = args[2];
+const baudRate = parseInt(args[2]) || 19200;
+const resultFile = args[3];
 
 // Initialize result object
 const result = {
     timestamp: new Date().toISOString(),
     port: port,
     address: address,
+    baudRate: baudRate,
     success: false,
     connected: false,
     moduleInfo: null,
@@ -51,54 +54,56 @@ async function testConnection() {
     try {
         console.log(`Testing connection to Fidelix Multi24 on ${port} at address ${address}...`);
 
-        // Open the serial port
-        console.log('Opening serial port...');
-        await new Promise((resolve, reject) => {
-            fxDevice.open(port, 57600, (err) => {
-                if (err) {
-                    reject(new Error(`Failed to open port: ${err.message}`));
-                } else {
-                    resolve();
-                }
-            });
-        });
+        // Open the serial port using public API (matching vendor reference code)
+        console.log(`Opening serial port at ${baudRate} bauds...`);
 
-        result.diagnostics.portOpened = true;
-        console.log('Serial port opened successfully');
+        const options = {
+            baudRate: baudRate,
+            responseTimeout: 5000
+        };
+
+        await fxDevice.openConnection(port, options)
+            .then(function() {
+                result.diagnostics.portOpened = true;
+                console.log('Serial port opened successfully');
+            });
 
         // Small delay to let port stabilize
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Try to read boot version
-        console.log(`Asking boot version from module at address ${address}...`);
+        // Test Modbus communication using public API
+        console.log(`Testing Modbus communication with module at address ${address}...`);
 
-        let bootVersion = { value: 0.0 };
+        const values = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
         try {
-            await fxDevice.askBootVersion(address, bootVersion);
-            result.diagnostics.modbusResponse = true;
-            result.diagnostics.bootVersion = bootVersion.value;
-            result.connected = true;
+            // Read holding registers (function 0x03) starting at address 0
+            // This matches mbpoll behavior: [01][03][00][00][00][0A][C5][CD]
+            await fxDevice.readHoldingRegisters(address, 0, 10, values)
+                .then(function() {
+                    result.diagnostics.modbusResponse = true;
+                    result.connected = true;
+                    console.log(`Module responded at address ${address}`);
+                    console.log(`Holding registers [0-9]: ${values.join(', ')}`);
 
-            console.log(`Boot version: ${bootVersion.value}`);
+                    // Get module information
+                    result.moduleInfo = {
+                        holdingRegisters: values,
+                        address: address,
+                        communicationOk: true
+                    };
 
-            // Get module information
-            result.moduleInfo = {
-                bootVersion: bootVersion.value,
-                address: address,
-                communicationOk: true
-            };
-
-            result.success = true;
-            result.error = null;
+                    result.success = true;
+                    result.error = null;
+                });
 
         } catch (err) {
             result.diagnostics.modbusResponse = false;
             throw new Error(`Module not responding at address ${address}: ${err}`);
         }
 
-        // Close port
-        fxDevice.close();
+        // Close port using public API
+        await fxDevice.closeConnection();
         console.log('Test completed successfully');
 
     } catch (err) {
@@ -109,7 +114,7 @@ async function testConnection() {
         // Try to close port if opened
         try {
             if (result.diagnostics.portOpened) {
-                fxDevice.close();
+                await fxDevice.closeConnection();
             }
         } catch (closeErr) {
             // Ignore close errors
