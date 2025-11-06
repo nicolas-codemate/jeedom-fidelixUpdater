@@ -143,6 +143,12 @@ try {
             throw new Exception('Méthode invalide (doit être m24firmware ou m24software) : ' . $method);
         }
 
+        // Build full path to the firmware/software file
+        $filePath = __DIR__ . '/../../data/filetransfer/' . basename($filename);
+        if (!file_exists($filePath)) {
+            throw new Exception('Fichier non trouvé : ' . $filename);
+        }
+
         $updateId = uniqid('update_', true);
         $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
         $scriptPath = __DIR__ . '/../../data/update_' . $updateId . '.js';
@@ -151,7 +157,7 @@ try {
         if ($subaddress !== null) {
             $logMsg .= ', Subaddress: ' . $subaddress . ' (pass-through mode)';
         }
-        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filename;
+        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filePath;
         log::add('fidelixUpdater', 'info', $logMsg);
 
         // Initialize status file

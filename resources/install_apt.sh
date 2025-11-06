@@ -31,7 +31,7 @@ fi
 echo ""
 echo "Step 2/3: Checking NodeJS installation..."
 
-JEEDOM_NODEJS_SCRIPT="$PLUGIN_DIR/../../../resources/install_nodejs.sh"
+JEEDOM_NODEJS_SCRIPT="$PLUGIN_DIR/../../resources/install_nodejs.sh"
 
 if [ -f "$JEEDOM_NODEJS_SCRIPT" ]; then
     echo "Using Jeedom's official NodeJS installation script..."
@@ -46,11 +46,20 @@ else
     echo "⚠ Warning: Jeedom's NodeJS script not found at $JEEDOM_NODEJS_SCRIPT"
     echo "Checking if NodeJS is already installed..."
 
-    type node &>/dev/null
-    if [ $? -eq 0 ]; then
-        actual=$(node -v)
+    # Temporarily disable exit on error for this check
+    set +e
+    which node >/dev/null 2>&1
+    NODE_FOUND=$?
+    set -e
+
+    if [ $NODE_FOUND -eq 0 ]; then
+        actual=$(node -v 2>&1 | head -1)
+        echo "Found NodeJS version: ${actual}"
         minVer='20'
-        testVer=$(php -r "echo version_compare('${actual}','v${minVer}','>=');")
+
+        # Use PHP to compare versions
+        testVer=$(php -r "echo version_compare('${actual}','v${minVer}','>=');" 2>/dev/null || echo "0")
+
         if [[ $testVer == "1" ]]; then
             echo "✓ NodeJS version is sufficient (${actual} >= v${minVer})"
         else
