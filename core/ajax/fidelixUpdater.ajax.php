@@ -23,7 +23,10 @@ try {
         throw new Exception(__('401 - Accès non autorisé', __FILE__));
     }
 
-    ajax::init(['uploadFirmware', 'uploadSoftware']);
+    // Load helper class
+    require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
+
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'testConnection', 'fixPermissions']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -116,6 +119,7 @@ try {
         $address = (int)init('address');
         $subaddress = init('subaddress') ? (int)init('subaddress') : null;
         $port = init('port');
+        $baudRate = (int)init('baudRate', 19200);
         $filename = init('filename');
         $method = init('method');
 
@@ -139,6 +143,12 @@ try {
             throw new Exception('Méthode invalide (doit être m24firmware ou m24software) : ' . $method);
         }
 
+        // Build full path to the firmware/software file
+        $filePath = __DIR__ . '/../../data/filetransfer/' . basename($filename);
+        if (!file_exists($filePath)) {
+            throw new Exception('Fichier non trouvé : ' . $filename);
+        }
+
         $updateId = uniqid('update_', true);
         $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
         $scriptPath = __DIR__ . '/../../data/update_' . $updateId . '.js';
@@ -147,7 +157,7 @@ try {
         if ($subaddress !== null) {
             $logMsg .= ', Subaddress: ' . $subaddress . ' (pass-through mode)';
         }
-        $logMsg .= ', Method: ' . $method . ', File: ' . $filename;
+        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filePath;
         log::add('fidelixUpdater', 'info', $logMsg);
 
         // Initialize status file
@@ -172,7 +182,7 @@ const options = {
 {$subaddressLine}
     type: '{$method}',
     port: '{$port}',
-    baudRate: 57600,
+    baudRate: {$baudRate},
     statusFile: '{$statusFile}'
 };
 
@@ -190,7 +200,7 @@ JSCODE;
         file_put_contents($scriptPath, $jsCode);
 
         // Launch Node.js in BACKGROUND (non-blocking) with '&'
-        $cmd = "sudo /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 &";
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 &";
         exec($cmd);
 
         log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan');
@@ -260,6 +270,165 @@ JSCODE;
         log::add('fidelixUpdater', 'debug', 'Cleanup effectué pour updateId: ' . $updateId . ' - Fichiers supprimés: ' . implode(', ', $deleted));
 
         ajax::success(array('deleted' => $deleted));
+    }
+
+    // ========================================
+    // ACTION: testConnection
+    // ========================================
+    if (init('action') == 'testConnection') {
+        $port = init('port');
+        $address = (int)init('address');
+        $baudRate = (int)init('baudRate', 19200);
+
+        if (empty($port)) {
+            throw new Exception('Port série non spécifié');
+        }
+
+        if (empty($address) || $address < 1 || $address > 247) {
+            throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
+        }
+
+        log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address . ', BaudRate: ' . $baudRate);
+
+        // Check Node.js installation
+        $nodejs = fidelixUpdaterHelper::checkNodeJs();
+        $nodeInstalled = $nodejs['installed'];
+        $nodeVersion = $nodejs['version'];
+
+        // Check port permissions (Unix-level only, no I/O test)
+        $portPermissions = fidelixUpdaterHelper::checkPortPermissions($port);
+
+        // Check if www-data is in dialout group
+        $dialout = fidelixUpdaterHelper::checkDialoutGroup();
+        $hasDialoutPermission = $dialout['inDialout'];
+        $groups = $dialout['groups'];
+
+        $diagnostics = array(
+            'nodejs' => array(
+                'installed' => $nodeInstalled,
+                'version' => trim($nodeVersion)
+            ),
+            'port' => array(
+                'path' => $port,
+                'exists' => $portPermissions['exists'],
+                'readable' => $portPermissions['readable'],
+                'writable' => $portPermissions['writable'],
+                'checkMethod' => $portPermissions['reason']
+            ),
+            'permissions' => array(
+                'wwwDataInDialout' => $hasDialoutPermission,
+                'groups' => trim($groups)
+            )
+        );
+
+        // If basic checks fail, return early
+        if (!$nodeInstalled) {
+            ajax::success(array(
+                'success' => false,
+                'error' => 'Node.js n\'est pas installé sur le système',
+                'diagnostics' => $diagnostics,
+                'moduleInfo' => null
+            ));
+            return;
+        }
+
+        if (!$portPermissions['exists']) {
+            ajax::success(array(
+                'success' => false,
+                'error' => 'Le port série n\'existe pas : ' . $port,
+                'diagnostics' => $diagnostics,
+                'moduleInfo' => null
+            ));
+            return;
+        }
+
+        // If permissions are not OK, return early with clear error message
+        if (!$portPermissions['readable'] || !$portPermissions['writable']) {
+            ajax::success(array(
+                'success' => false,
+                'error' => 'Permissions insuffisantes sur le port série. L\'utilisateur www-data doit être dans le groupe dialout.',
+                'diagnostics' => $diagnostics,
+                'moduleInfo' => null
+            ));
+            return;
+        }
+
+        // Generate unique test ID
+        $testId = uniqid('test_', true);
+        $resultFile = __DIR__ . '/../../data/test_result_' . $testId . '.json';
+        $scriptPath = __DIR__ . '/../../3rdparty/Fidelix/FxLib/testConnection.js';
+
+        // Run test script (synchronous - wait for result)
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
+               escapeshellarg($port) . " " .
+               escapeshellarg($address) . " " .
+               escapeshellarg($baudRate) . " " .
+               escapeshellarg($resultFile) . " 2>&1";
+
+        $output = array();
+        $returnCode = 0;
+        exec($cmd, $output, $returnCode);
+
+        log::add('fidelixUpdater', 'debug', 'Test command executed - Return code: ' . $returnCode);
+
+        // Read result file
+        if (file_exists($resultFile)) {
+            $testResult = json_decode(file_get_contents($resultFile), true);
+            @unlink($resultFile); // Cleanup
+
+            if ($testResult) {
+                // Merge diagnostics
+                $testResult['diagnostics'] = array_merge($diagnostics, $testResult['diagnostics']);
+
+                ajax::success($testResult);
+                return;
+            }
+        }
+
+        // If we get here, test failed to produce a result
+        ajax::success(array(
+            'success' => false,
+            'error' => 'Le test n\'a pas pu être exécuté. Vérifiez les logs.',
+            'diagnostics' => $diagnostics,
+            'moduleInfo' => null,
+            'output' => implode("\n", $output)
+        ));
+    }
+
+    // ========================================
+    // ACTION: fixPermissions
+    // ========================================
+    if (init('action') == 'fixPermissions') {
+        log::add('fidelixUpdater', 'info', 'Reconfiguration des permissions demandée');
+
+        $fixScript = __DIR__ . '/../../resources/fix-permissions.sh';
+
+        if (!file_exists($fixScript)) {
+            throw new Exception('Script de correction non trouvé : ' . $fixScript);
+        }
+
+        // Execute fix script
+        $cmd = system::getCmdSudo() . " bash " . escapeshellarg($fixScript) . " 2>&1";
+        $output = array();
+        $returnCode = 0;
+
+        exec($cmd, $output, $returnCode);
+
+        $result = array(
+            'success' => ($returnCode === 0),
+            'returnCode' => $returnCode,
+            'output' => implode("\n", $output)
+        );
+
+        if ($returnCode === 0) {
+            log::add('fidelixUpdater', 'info', 'Reconfiguration réussie');
+        } else {
+            log::add('fidelixUpdater', 'error', 'Échec de la reconfiguration - Code: ' . $returnCode);
+            log::add('fidelixUpdater', 'debug', 'Output: ' . implode("\n", $output));
+            $result['error'] = 'La reconfiguration a échoué (code: ' . $returnCode . ')';
+        }
+
+        ajax::success($result);
     }
 
     throw new Exception(__('Aucune méthode correspondante à', __FILE__) . ' : ' . init('action'));

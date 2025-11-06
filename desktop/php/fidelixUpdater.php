@@ -17,7 +17,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
             <div class="cursor logoPrimary" id="bt_openUpdateModal">
                 <i class="fas fa-upload"></i>
                 <br />
-                <span>{{Mettre à jour Firmware/Software}}</span>
+                <span>{{Mettre à jour}}</span>
+            </div>
+            <div class="cursor logoSecondary" id="bt_openTestModal">
+                <i class="fas fa-plug"></i>
+                <br />
+                <span>{{Tester la connexion}}</span>
             </div>
         </div>
 
@@ -45,7 +50,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <li>{{Mise à jour software (fichier .M24IEC)}}</li>
                 <li>{{Suivi de progression en temps réel}}</li>
                 <li>{{Mécanisme de récupération automatique en cas d'échec}}</li>
-                <li>{{Support Modbus RTU sur RS485 (57600 bauds)}}</li>
+                <li>{{Support Modbus RTU sur RS485 (vitesse configurable : 9600-115200 bauds)}}</li>
             </ul>
 
             <h5><i class="fas fa-wrench"></i> {{Configuration requise}}</h5>
@@ -66,5 +71,14 @@ $('#bt_openUpdateModal').on('click', function() {
         height: 600
     });
     $('#md_modal').load('index.php?v=d&plugin=fidelixUpdater&modal=modal.update').dialog('open');
+});
+
+$('#bt_openTestModal').on('click', function() {
+    $('#md_modal').dialog({
+        title: "{{Test de connexion}}",
+        width: 900,
+        height: 700
+    });
+    $('#md_modal').load('index.php?v=d&plugin=fidelixUpdater&modal=modal.test').dialog('open');
 });
 </script>

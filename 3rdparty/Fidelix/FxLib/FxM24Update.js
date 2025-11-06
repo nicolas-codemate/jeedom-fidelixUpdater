@@ -19,7 +19,7 @@ const fxFwUpdate = require('./FxMulti24/').fxFwUpdate();
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
 //var FILETRANSFERDIR = path.normalize(process.env.ROOTDIR + path.sep + "filetransfer");
-var FILETRANSFERDIR = path.normalize("/var/www/html/plugins/fidelixUpdater/data/filetransfer");  // PATCHED: Changed plugin name
+var FILETRANSFERDIR = path.normalize("/srv/plugins/fidelixUpdater/data/filetransfer");  // PATCHED: Changed plugin name and fixed Docker path
 
 
 const logFilePath = path.resolve(__dirname, './logsJeedom.txt');
@@ -270,6 +270,21 @@ function fxM24Update() {
         // PATCHED: Added recovery mechanism to prevent device bricking
         fxLog.error("Update failed, attempting recovery... " + err);
         console.log("Update failed, attempting recovery: " + err);
+
+        // PATCHED: Write error to status file immediately
+        if (self.statusFile) {
+            try {
+                fs.writeFileSync(self.statusFile, JSON.stringify({
+                    phase: 'Error',
+                    status: 'Update failed',
+                    progress: 0,
+                    timestamp: new Date().toISOString(),
+                    error: String(err)
+                }, null, 2));
+            } catch (writeErr) {
+                fxLog.error("Failed to write error to status file: " + writeErr);
+            }
+        }
 
         // Try to restore device to normal mode
         return Q.resolve()
