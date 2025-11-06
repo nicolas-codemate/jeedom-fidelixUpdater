@@ -349,8 +349,8 @@ JSCODE;
 
         // Generate unique test ID
         $testId = uniqid('test_', true);
-        $resultFile = '/srv/plugins/fidelixUpdater/data/test_result_' . $testId . '.json';
-        $scriptPath = '/srv/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib/testConnection.js';
+        $resultFile = __DIR__ . '/../../data/test_result_' . $testId . '.json';
+        $scriptPath = __DIR__ . '/../../3rdparty/Fidelix/FxLib/testConnection.js';
 
         // Run test script (synchronous - wait for result)
         $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
@@ -395,7 +395,7 @@ JSCODE;
     if (init('action') == 'fixPermissions') {
         log::add('fidelixUpdater', 'info', 'Reconfiguration des permissions demandée');
 
-        $fixScript = '/srv/plugins/fidelixUpdater/resources/fix-permissions.sh';
+        $fixScript = __DIR__ . '/../../resources/fix-permissions.sh';
 
         if (!file_exists($fixScript)) {
             throw new Exception('Script de correction non trouvé : ' . $fixScript);

@@ -26,109 +26,70 @@ else
 fi
 
 # ================================================
-# Step 2: Check/Install NodeJS
+# Step 2: Check/Install NodeJS using Jeedom's script
 # ================================================
 echo ""
 echo "Step 2/3: Checking NodeJS installation..."
 
-installVer='20'
-minVer='20'
+JEEDOM_NODEJS_SCRIPT="$PLUGIN_DIR/../../../resources/install_nodejs.sh"
 
-type node &>/dev/null
-if [ $? -eq 0 ]; then
-    actual=$(node -v)
-else
-    actual='None'
-fi
-
-echo "Current NodeJS version: ${actual}"
-
-testVer=$(php -r "echo version_compare('${actual}','v${minVer}','>=');")
-if [[ $testVer == "1" ]]; then
-    echo "✓ NodeJS version is sufficient (${actual} >= v${minVer})"
-else
-    echo "NodeJS installation required (need v${minVer}+, found ${actual})"
-
-    arch=$(arch)
-    bits=$(getconf LONG_BIT)
-
-    # Check architecture compatibility
-    if { [ "$arch" = "i386" ] || [ "$arch" = "i686" ]; } && [ "$bits" -eq "32" ]; then
-        echo "ERROR: x86 32-bit architecture is not supported by NodeJS 20+"
+if [ -f "$JEEDOM_NODEJS_SCRIPT" ]; then
+    echo "Using Jeedom's official NodeJS installation script..."
+    bash "$JEEDOM_NODEJS_SCRIPT"
+    if [ $? -eq 0 ]; then
+        echo "✓ NodeJS installation/verification completed"
+    else
+        echo "ERROR: Jeedom's NodeJS installation script failed"
         exit 1
     fi
+else
+    echo "⚠ Warning: Jeedom's NodeJS script not found at $JEEDOM_NODEJS_SCRIPT"
+    echo "Checking if NodeJS is already installed..."
 
-    # Prioritize nodesource nodejs
-    sudo bash -c "cat > /etc/apt/preferences.d/nodesource" << EOL
-Package: nodejs
-Pin: origin deb.nodesource.com
-Pin-Priority: 600
-EOL
-
-    echo "Updating package list..."
-    sudo apt-get update
-
-    echo "Installing build dependencies..."
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y lsb-release build-essential apt-utils git curl gnupg
-
-    # Purge old nodejs/npm
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -y --purge autoremove npm &>/dev/null || true
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -y --purge autoremove nodejs &>/dev/null || true
-
-    if [[ $arch == "armv6l" ]]; then
-        armVer="20.8.0"
-        echo "ARMv6 detected (Pi Zero/1), using unofficial build ${armVer}..."
-        wget https://unofficial-builds.nodejs.org/download/release/v${armVer}/node-v${armVer}-linux-armv6l.tar.gz
-        tar -xvf node-v${armVer}-linux-armv6l.tar.gz
-        cd node-v${armVer}-linux-armv6l
-        sudo cp -f -R * /usr/local/
-        cd ..
-        rm -fR node-v${armVer}-linux-armv6l*
-        sudo ln -sf /usr/local/bin/node /usr/bin/node
-        sudo ln -sf /usr/local/bin/node /usr/bin/nodejs
-        sudo npm install -g npm
+    type node &>/dev/null
+    if [ $? -eq 0 ]; then
+        actual=$(node -v)
+        minVer='20'
+        testVer=$(php -r "echo version_compare('${actual}','v${minVer}','>=');")
+        if [[ $testVer == "1" ]]; then
+            echo "✓ NodeJS version is sufficient (${actual} >= v${minVer})"
+        else
+            echo "ERROR: NodeJS version ${actual} is too old (need v${minVer}+)"
+            echo "Please install NodeJS 20+ manually or use Jeedom's installation script"
+            exit 1
+        fi
     else
-        echo "Installing NodeJS from official nodesource repository..."
-        NODE_MAJOR=$installVer
-        sudo mkdir -p /etc/apt/keyrings
-        [[ -f /etc/apt/keyrings/nodesource.gpg ]] && sudo rm /etc/apt/keyrings/nodesource.gpg || true
-        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-        [[ -f /etc/apt/sources.list.d/nodesource.list ]] && sudo rm /etc/apt/sources.list.d/nodesource.list || true
-        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
-        sudo apt-get update
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
-    fi
-
-    # Clean up
-    [[ -f /etc/apt/preferences.d/nodesource ]] && sudo rm -f /etc/apt/preferences.d/nodesource || true
-
-    # Verify installation
-    new=$(node -v)
-    echo "Installed NodeJS version: ${new}"
-    testVerAfter=$(php -r "echo version_compare('${new}','v${minVer}','>=');")
-    if [[ $testVerAfter != "1" ]]; then
-        echo "ERROR: NodeJS installation failed or version too old"
+        echo "ERROR: NodeJS is not installed and Jeedom's script is not available"
+        echo "Please install NodeJS 20+ manually"
         exit 1
-    else
-        echo "✓ NodeJS ${new} installed successfully"
     fi
-fi
-
-# Verify npm is available
-type npm &>/dev/null
-if [ $? -ne 0 ]; then
-    echo "Installing npm..."
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y npm
-    sudo npm install -g npm
 fi
 
 # ================================================
-# Step 3: Cleanup
+# Step 3: Install Node.js dependencies
 # ================================================
 echo ""
-echo "Step 3/3: Cleanup..."
-echo "Cleaning npm cache..."
-sudo npm cache clean --force 2>/dev/null || true
+echo "Step 3/3: Installing plugin Node.js dependencies..."
+
+if [ -d "$PLUGIN_DIR/3rdparty/Fidelix/FxLib" ]; then
+    cd "$PLUGIN_DIR/3rdparty/Fidelix/FxLib"
+
+    if [ -f "package.json" ]; then
+        echo "Installing npm packages..."
+        npm install --silent
+        if [ $? -eq 0 ]; then
+            echo "✓ Node.js dependencies installed successfully"
+        else
+            echo "ERROR: Failed to install Node.js dependencies"
+            exit 1
+        fi
+    else
+        echo "⚠ No package.json found in FxLib directory"
+    fi
+else
+    echo "ERROR: FxLib directory not found at $PLUGIN_DIR/3rdparty/Fidelix/FxLib"
+    exit 1
+fi
 
 echo ""
 echo "=================================================="

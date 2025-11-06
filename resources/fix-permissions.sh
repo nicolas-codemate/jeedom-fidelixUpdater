@@ -4,7 +4,7 @@
 
 set -e  # Exit on error
 
-PLUGIN_DIR="/srv/plugins/fidelixUpdater"
+PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_FILE="$PLUGIN_DIR/data/logs/fix-permissions.log"
 
 # Function to log messages
