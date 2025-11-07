@@ -13,6 +13,8 @@ data/filetransfer/*
 data/status/*
 data/logs/*
 data/*.js
+data/processes.json
+data/test_result_*.json
 !data/.gitkeep
 
 # Node modules

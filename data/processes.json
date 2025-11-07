@@ -8,12 +8,12 @@
             "subaddress": null,
             "type": "m24software",
             "filename": "AeroPack_V1081_20250918.M24IEC",
-            "status": "running",
-            "phase": "Programming",
-            "progress": 90,
+            "status": "completed",
+            "phase": "Programming OK",
+            "progress": 100,
             "startTime": "2025-11-07T19:34:12+01:00",
-            "lastUpdate": "2025-11-07T19:36:01+01:00",
-            "endTime": null,
+            "lastUpdate": "2025-11-07T19:36:21+01:00",
+            "endTime": "2025-11-07T19:36:21+01:00",
             "error": null
         }
     ]
