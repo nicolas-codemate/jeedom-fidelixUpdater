@@ -38,6 +38,14 @@ function fidelixUpdater_install() {
 
     log::add('fidelixUpdater', 'debug', 'Directories created');
 
+    // Initialize processes registry
+    require_once $pluginDir . '/core/class/fidelixUpdater.class.php';
+    if (fidelixUpdater::initializeRegistry()) {
+        log::add('fidelixUpdater', 'info', 'Processes registry initialized');
+    } else {
+        log::add('fidelixUpdater', 'warning', 'Failed to initialize processes registry');
+    }
+
     // Execute fix-permissions script if it exists
     if (file_exists($fixScript)) {
         log::add('fidelixUpdater', 'info', 'Running permissions configuration script...');

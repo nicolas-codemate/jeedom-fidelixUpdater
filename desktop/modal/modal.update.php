@@ -112,7 +112,7 @@ if (!isConnect('admin')) {
                     <li><strong>{{Adresse}}</strong> : {{Adresse du module maître (ex: 1)}}</li>
                     <li><strong>{{Sous-adresse}}</strong> : {{Adresse du module esclave (ex: 10)}}</li>
                 </ul>
-                <p class="small text-muted">{{Laissez la sous-adresse vide pour une mise à jour directe (sans pass-through).}}</p>
+                <p class="small">{{Laissez la sous-adresse vide pour une mise à jour directe (sans pass-through).}}</p>
             </div>
         </div>
     </div>

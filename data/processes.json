@@ -1,0 +1,20 @@
+{
+    "processes": [
+        {
+            "updateId": "update_690e3ba42df0f4.04860160",
+            "pid": 12186,
+            "port": "/dev/ttyUSB0",
+            "address": 1,
+            "subaddress": null,
+            "type": "m24software",
+            "filename": "AeroPack_V1081_20250918.M24IEC",
+            "status": "running",
+            "phase": "Programming",
+            "progress": 90,
+            "startTime": "2025-11-07T19:34:12+01:00",
+            "lastUpdate": "2025-11-07T19:36:01+01:00",
+            "endTime": null,
+            "error": null
+        }
+    ]
+}

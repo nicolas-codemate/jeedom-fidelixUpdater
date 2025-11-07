@@ -244,6 +244,14 @@ $(function() {
             </div>
         `);
 
+        // Scroll to result after a short delay to ensure DOM is updated
+        setTimeout(function() {
+            const resultElement = document.getElementById('testResultAlert');
+            if (resultElement) {
+                resultElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+
         // Display diagnostics
         const diag = result.diagnostics || {};
 

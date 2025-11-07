@@ -29,5 +29,11 @@
 		"smart",
 		"luna",
 		"atlas"
-	]
+	],
+	"functionality": {
+		"cron": {
+			"active": true,
+			"schedule": "0 3 * * *"
+		}
+	}
 }

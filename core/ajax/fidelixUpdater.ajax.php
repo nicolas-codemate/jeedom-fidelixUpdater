@@ -116,6 +116,9 @@ try {
     // ACTION: startUpdate
     // ========================================
     if (init('action') == 'startUpdate') {
+        // Sync processes with status files first
+        fidelixUpdater::syncActiveProcesses();
+
         $address = (int)init('address');
         $subaddress = init('subaddress') ? (int)init('subaddress') : null;
         $port = init('port');
@@ -135,9 +138,9 @@ try {
             throw new Exception('Port série non spécifié');
         }
 
-        // Check if port is locked by another process
+        // Check if THIS specific port is locked
         if (fidelixUpdater::isPortLocked($port)) {
-            throw new Exception('Un update est déjà en cours sur ce port série : ' . $port);
+            throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter ou utiliser un autre port.');
         }
 
         if (empty($filename)) {
@@ -256,10 +259,38 @@ JSCODE;
             throw new Exception('Fichier status invalide (JSON malformé)');
         }
 
-        // Update process registry with current status
+        // Check if process is still alive (if updateId provided)
+        $pidExists = null;
+        $pid = null;
         if (!empty($updateId)) {
+            // Get process info from registry to check PID BEFORE updating status
+            $activeProcesses = fidelixUpdater::getActiveProcesses();
+            foreach ($activeProcesses as $process) {
+                if ($process['updateId'] === $updateId) {
+                    $pid = isset($process['pid']) ? $process['pid'] : null;
+                    $pidExists = isset($process['pidExists']) ? $process['pidExists'] : null;
+                    break;
+                }
+            }
+
+            // If PID is dead and progress < 100 and no error yet, mark as crashed
+            if ($pidExists === false && $status['progress'] < 100 && empty($status['error'])) {
+                $status['error'] = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté et alimenté.';
+                $status['phase'] = 'Error';
+
+                // Update status file
+                file_put_contents($statusPath, json_encode($status, JSON_PRETTY_PRINT));
+
+                log::add('fidelixUpdater', 'error', "Process {$updateId} (PID: {$pid}) died unexpectedly at {$status['progress']}%");
+            }
+
+            // Update process registry with current status (after potential error detection)
             fidelixUpdater::updateProcessStatus($updateId, $status);
         }
+
+        // Add PID info to response
+        $status['pidExists'] = $pidExists;
+        $status['pid'] = $pid;
 
         ajax::success($status);
     }
@@ -301,6 +332,9 @@ JSCODE;
     // ACTION: getProcesses
     // ========================================
     if (init('action') == 'getProcesses') {
+        // Sync all running processes with their status files first
+        fidelixUpdater::syncActiveProcesses();
+
         $active = fidelixUpdater::getActiveProcesses();
         $history = fidelixUpdater::getProcessHistory(50);
 
@@ -333,6 +367,9 @@ JSCODE;
     // ACTION: testConnection
     // ========================================
     if (init('action') == 'testConnection') {
+        // Sync processes with status files first
+        fidelixUpdater::syncActiveProcesses();
+
         $port = init('port');
         $address = (int)init('address');
         $baudRate = (int)init('baudRate', 19200);
@@ -343,6 +380,11 @@ JSCODE;
 
         if (empty($address) || $address < 1 || $address > 247) {
             throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
+        }
+
+        // Check if THIS specific port is locked
+        if (fidelixUpdater::isPortLocked($port)) {
+            throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter avant de tester la connexion.');
         }
 
         log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address . ', BaudRate: ' . $baudRate);

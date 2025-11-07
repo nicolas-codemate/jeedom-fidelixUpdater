@@ -201,6 +201,86 @@ class fidelixUpdater extends eqLogic {
     }
 
     /**
+     * Synchronize all running processes with their status files
+     * This ensures processes.json is up-to-date even when modals are closed
+     *
+     * @return int Number of processes synchronized
+     */
+    public static function syncActiveProcesses() {
+        $registry = self::loadProcessesRegistry();
+        $synced = 0;
+
+        foreach ($registry['processes'] as &$process) {
+            if ($process['status'] === 'running') {
+                $needsUpdate = false;
+
+                // First, try to read the status file (always read it first!)
+                $statusFile = __DIR__ . '/../../data/status/status_' . $process['updateId'] . '.json';
+                $statusData = null;
+
+                if (file_exists($statusFile)) {
+                    $statusData = json_decode(file_get_contents($statusFile), true);
+
+                    if ($statusData && is_array($statusData)) {
+                        // Update process with latest status from file
+                        $process['phase'] = isset($statusData['phase']) ? $statusData['phase'] : $process['phase'];
+                        $process['progress'] = isset($statusData['progress']) ? (int)$statusData['progress'] : $process['progress'];
+                        $process['lastUpdate'] = date('c');
+
+                        // Check if process completed or failed according to status file
+                        if (isset($statusData['error']) && $statusData['error'] !== null) {
+                            $process['status'] = 'failed';
+                            $process['error'] = $statusData['error'];
+                            $process['endTime'] = date('c');
+                            $needsUpdate = true;
+                        } elseif ($process['progress'] >= 100) {
+                            $process['status'] = 'completed';
+                            $process['endTime'] = date('c');
+                            $needsUpdate = true;
+                        } else {
+                            // Process still running, mark as updated
+                            $needsUpdate = true;
+                        }
+                    }
+                }
+
+                // ONLY check PID if status file indicates process is still running (progress < 100 and no error)
+                if ($process['status'] === 'running' && $process['progress'] < 100 && empty($process['error'])) {
+                    $pid = isset($process['pid']) ? (int)$process['pid'] : 0;
+                    $pidExists = ($pid > 0) ? posix_kill($pid, 0) : false;
+
+                    // If PID is dead, check if status file was recently updated
+                    if (!$pidExists) {
+                        $lastUpdateTime = strtotime($process['lastUpdate']);
+                        $timeSinceUpdate = time() - $lastUpdateTime;
+
+                        // Only mark as crashed if no update for more than 30 seconds
+                        if ($timeSinceUpdate > 30) {
+                            $process['status'] = 'failed';
+                            $process['error'] = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté et alimenté.';
+                            $process['phase'] = 'Error';
+                            $process['endTime'] = date('c');
+                            $needsUpdate = true;
+
+                            log::add('fidelixUpdater', 'error', "Process {$process['updateId']} (PID: {$pid}) died unexpectedly at {$process['progress']}% (no update for {$timeSinceUpdate}s)");
+                        }
+                    }
+                }
+
+                if ($needsUpdate) {
+                    $synced++;
+                }
+            }
+        }
+
+        if ($synced > 0) {
+            self::saveProcessesRegistry($registry);
+        }
+
+        return $synced;
+    }
+
+    /**
      * Get all active (running) processes
      *
      * @return array Array of running processes
@@ -319,6 +399,117 @@ class fidelixUpdater extends eqLogic {
         self::saveProcessesRegistry($registry);
 
         return $removed;
+    }
+
+    /**
+     * Cleanup temporary files (status, script, and uploaded files)
+     * Removes files for processes that are no longer in the registry or are completed/failed
+     *
+     * @return array Number of files removed
+     */
+    public static function cleanupTempFiles() {
+        $registry = self::loadProcessesRegistry();
+        $removed = array('status' => 0, 'scripts' => 0, 'uploads' => 0);
+
+        // Get all active/running updateIds and their filenames
+        $activeUpdateIds = array();
+        $activeFilenames = array();
+        foreach ($registry['processes'] as $process) {
+            if ($process['status'] === 'running') {
+                $activeUpdateIds[] = $process['updateId'];
+                if (isset($process['filename'])) {
+                    $activeFilenames[] = $process['filename'];
+                }
+            }
+        }
+
+        // Cleanup status files
+        $statusDir = __DIR__ . '/../../data/status';
+        if (is_dir($statusDir)) {
+            $statusFiles = scandir($statusDir);
+            foreach ($statusFiles as $file) {
+                if (strpos($file, 'status_update_') === 0 && strpos($file, '.json') !== false) {
+                    $updateId = str_replace(array('status_', '.json'), '', $file);
+                    if (!in_array($updateId, $activeUpdateIds)) {
+                        @unlink($statusDir . '/' . $file);
+                        $removed['status']++;
+                    }
+                }
+            }
+        }
+
+        // Cleanup script files
+        $dataDir = __DIR__ . '/../../data';
+        if (is_dir($dataDir)) {
+            $scriptFiles = scandir($dataDir);
+            foreach ($scriptFiles as $file) {
+                if (strpos($file, 'update_update_') === 0 && strpos($file, '.js') !== false) {
+                    $updateId = str_replace(array('update_', '.js'), '', $file);
+                    if (!in_array($updateId, $activeUpdateIds)) {
+                        @unlink($dataDir . '/' . $file);
+                        $removed['scripts']++;
+                    }
+                }
+            }
+        }
+
+        // Cleanup uploaded firmware/software files (only if not in use by running process)
+        $filetransferDir = __DIR__ . '/../../data/filetransfer';
+        if (is_dir($filetransferDir)) {
+            $uploadedFiles = scandir($filetransferDir);
+            foreach ($uploadedFiles as $file) {
+                if ($file === '.' || $file === '..') {
+                    continue;
+                }
+
+                // Only delete .hex and .M24IEC files
+                $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+                if (in_array($ext, array('hex', 'm24iec'))) {
+                    // Check if file is currently being used by a running process
+                    if (!in_array($file, $activeFilenames)) {
+                        @unlink($filetransferDir . '/' . $file);
+                        $removed['uploads']++;
+                    }
+                }
+            }
+        }
+
+        return $removed;
+    }
+
+    /**
+     * Cron function called by Jeedom
+     * Performs cleanup of old processes and temporary files
+     */
+    public static function cron() {
+        log::add('fidelixUpdater', 'debug', 'Running cron cleanup');
+
+        // Sync active processes first
+        $synced = self::syncActiveProcesses();
+
+        // Cleanup old processes from registry
+        $removedProcesses = self::cleanupOldProcesses();
+
+        // Cleanup temporary files
+        $removedFiles = self::cleanupTempFiles();
+
+        log::add('fidelixUpdater', 'info', "Cron cleanup completed: synced={$synced}, removed_processes={$removedProcesses}, removed_status_files={$removedFiles['status']}, removed_script_files={$removedFiles['scripts']}, removed_upload_files={$removedFiles['uploads']}");
+    }
+
+    /**
+     * Initialize processes registry file if it doesn't exist
+     *
+     * @return bool Success status
+     */
+    public static function initializeRegistry() {
+        $filePath = self::getProcessesFilePath();
+
+        if (!file_exists($filePath)) {
+            $initialData = array('processes' => array());
+            return file_put_contents($filePath, json_encode($initialData, JSON_PRETTY_PRINT)) !== false;
+        }
+
+        return true;
     }
 
     /**
