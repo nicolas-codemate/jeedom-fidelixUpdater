@@ -26,7 +26,7 @@ try {
     // Load helper class
     require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'testConnection', 'fixPermissions']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -135,6 +135,11 @@ try {
             throw new Exception('Port série non spécifié');
         }
 
+        // Check if port is locked by another process
+        if (fidelixUpdater::isPortLocked($port)) {
+            throw new Exception('Un update est déjà en cours sur ce port série : ' . $port);
+        }
+
         if (empty($filename)) {
             throw new Exception('Nom de fichier non spécifié');
         }
@@ -174,6 +179,9 @@ try {
         $subaddressLine = $subaddress !== null ? "    subaddress: {$subaddress}," : "";
 
         $jsCode = <<<JSCODE
+// Set process title for identification and security
+process.title = 'fidelixUpdater_{$updateId}';
+
 const fxM24Update = require('../3rdparty/Fidelix/FxLib/FxM24Update.js');
 const multi24Update = new fxM24Update();
 
@@ -199,11 +207,22 @@ JSCODE;
 
         file_put_contents($scriptPath, $jsCode);
 
-        // Launch Node.js in BACKGROUND (non-blocking) with '&'
-        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 &";
-        exec($cmd);
+        // Launch Node.js in BACKGROUND and capture PID
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 & echo $!";
+        $pid = (int)trim(exec($cmd));
 
-        log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan');
+        log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan - PID: ' . $pid);
+
+        // Register process in registry
+        fidelixUpdater::registerProcess(array(
+            'updateId' => $updateId,
+            'pid' => $pid,
+            'port' => $port,
+            'address' => $address,
+            'subaddress' => $subaddress,
+            'type' => $method,
+            'filename' => basename($filename)
+        ));
 
         // Return IMMEDIATELY with updateId and statusFile name
         ajax::success(array(
@@ -217,6 +236,7 @@ JSCODE;
     // ========================================
     if (init('action') == 'getStatus') {
         $statusFile = init('statusFile');
+        $updateId = init('updateId');
 
         if (empty($statusFile)) {
             throw new Exception('statusFile non spécifié');
@@ -234,6 +254,11 @@ JSCODE;
 
         if ($status === null) {
             throw new Exception('Fichier status invalide (JSON malformé)');
+        }
+
+        // Update process registry with current status
+        if (!empty($updateId)) {
+            fidelixUpdater::updateProcessStatus($updateId, $status);
         }
 
         ajax::success($status);
@@ -270,6 +295,38 @@ JSCODE;
         log::add('fidelixUpdater', 'debug', 'Cleanup effectué pour updateId: ' . $updateId . ' - Fichiers supprimés: ' . implode(', ', $deleted));
 
         ajax::success(array('deleted' => $deleted));
+    }
+
+    // ========================================
+    // ACTION: getProcesses
+    // ========================================
+    if (init('action') == 'getProcesses') {
+        $active = fidelixUpdater::getActiveProcesses();
+        $history = fidelixUpdater::getProcessHistory(50);
+
+        ajax::success(array(
+            'active' => $active,
+            'history' => $history
+        ));
+    }
+
+    // ========================================
+    // ACTION: killProcess
+    // ========================================
+    if (init('action') == 'killProcess') {
+        $updateId = init('updateId');
+
+        if (empty($updateId)) {
+            throw new Exception('updateId non spécifié');
+        }
+
+        // Sanitize updateId
+        $updateId = preg_replace('/[^a-zA-Z0-9._-]/', '', $updateId);
+
+        // Kill the process
+        fidelixUpdater::killProcess($updateId);
+
+        ajax::success('Process killed successfully');
     }
 
     // ========================================

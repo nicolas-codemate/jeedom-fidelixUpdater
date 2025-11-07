@@ -303,7 +303,8 @@ $(function() {
             url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php',
             data: {
                 action: 'getStatus',
-                statusFile: statusFile
+                statusFile: statusFile,
+                updateId: updateId
             },
             dataType: 'json',
             success: function(data) {

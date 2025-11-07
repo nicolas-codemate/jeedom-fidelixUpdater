@@ -26,6 +26,55 @@ $eqLogics = eqLogic::byType($plugin->getId());
             </div>
         </div>
 
+        <legend><i class="fas fa-tasks"></i> {{Processus en cours}}</legend>
+
+        <div id="activeProcessesContainer">
+            <div id="noActiveProcesses" class="alert alert-info" style="display:none;">
+                {{Aucun processus en cours}}
+            </div>
+            <div id="activeProcessesTableContainer" style="display:none;">
+                <table class="table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th style="width:150px">{{Port}}</th>
+                            <th style="width:100px">{{Type}}</th>
+                            <th style="width:80px">{{Adresse}}</th>
+                            <th style="width:150px">{{Phase}}</th>
+                            <th style="width:120px">{{Progression}}</th>
+                            <th style="width:150px">{{Démarré}}</th>
+                            <th style="width:80px">{{Actions}}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activeProcessesTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <legend><i class="fas fa-history"></i> {{Historique (1 semaine)}}</legend>
+
+        <div id="processHistoryContainer">
+            <div id="noHistoryProcesses" class="alert alert-info" style="display:none;">
+                {{Aucun historique}}
+            </div>
+            <div id="historyTableContainer" style="display:none;">
+                <table class="table table-condensed table-striped">
+                    <thead>
+                        <tr>
+                            <th style="width:150px">{{Port}}</th>
+                            <th style="width:100px">{{Type}}</th>
+                            <th style="width:80px">{{Adresse}}</th>
+                            <th style="width:100px">{{Statut}}</th>
+                            <th style="width:100px">{{Progression}}</th>
+                            <th style="width:150px">{{Début}}</th>
+                            <th style="width:150px">{{Fin}}</th>
+                            <th style="width:80px">{{Durée}}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="processHistoryTable"></tbody>
+                </table>
+            </div>
+        </div>
+
         <legend><i class="fas fa-info-circle"></i> {{Informations}}</legend>
 
         <!-- Précautions importantes -->
