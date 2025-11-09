@@ -26,7 +26,7 @@ try {
     // Load helper class
     require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'testConnection', 'fixPermissions']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -116,6 +116,9 @@ try {
     // ACTION: startUpdate
     // ========================================
     if (init('action') == 'startUpdate') {
+        // Sync processes with status files first
+        fidelixUpdater::syncActiveProcesses();
+
         $address = (int)init('address');
         $subaddress = init('subaddress') ? (int)init('subaddress') : null;
         $port = init('port');
@@ -133,6 +136,11 @@ try {
 
         if (empty($port)) {
             throw new Exception('Port série non spécifié');
+        }
+
+        // Check if THIS specific port is locked
+        if (fidelixUpdater::isPortLocked($port)) {
+            throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter ou utiliser un autre port.');
         }
 
         if (empty($filename)) {
@@ -174,6 +182,9 @@ try {
         $subaddressLine = $subaddress !== null ? "    subaddress: {$subaddress}," : "";
 
         $jsCode = <<<JSCODE
+// Set process title for identification and security
+process.title = 'fidelixUpdater_{$updateId}';
+
 const fxM24Update = require('../3rdparty/Fidelix/FxLib/FxM24Update.js');
 const multi24Update = new fxM24Update();
 
@@ -199,11 +210,22 @@ JSCODE;
 
         file_put_contents($scriptPath, $jsCode);
 
-        // Launch Node.js in BACKGROUND (non-blocking) with '&'
-        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 &";
-        exec($cmd);
+        // Launch Node.js in BACKGROUND and capture PID
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 & echo $!";
+        $pid = (int)trim(exec($cmd));
 
-        log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan');
+        log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan - PID: ' . $pid);
+
+        // Register process in registry
+        fidelixUpdater::registerProcess(array(
+            'updateId' => $updateId,
+            'pid' => $pid,
+            'port' => $port,
+            'address' => $address,
+            'subaddress' => $subaddress,
+            'type' => $method,
+            'filename' => basename($filename)
+        ));
 
         // Return IMMEDIATELY with updateId and statusFile name
         ajax::success(array(
@@ -217,6 +239,7 @@ JSCODE;
     // ========================================
     if (init('action') == 'getStatus') {
         $statusFile = init('statusFile');
+        $updateId = init('updateId');
 
         if (empty($statusFile)) {
             throw new Exception('statusFile non spécifié');
@@ -235,6 +258,39 @@ JSCODE;
         if ($status === null) {
             throw new Exception('Fichier status invalide (JSON malformé)');
         }
+
+        // Check if process is still alive (if updateId provided)
+        $pidExists = null;
+        $pid = null;
+        if (!empty($updateId)) {
+            // Get process info from registry to check PID BEFORE updating status
+            $activeProcesses = fidelixUpdater::getActiveProcesses();
+            foreach ($activeProcesses as $process) {
+                if ($process['updateId'] === $updateId) {
+                    $pid = isset($process['pid']) ? $process['pid'] : null;
+                    $pidExists = isset($process['pidExists']) ? $process['pidExists'] : null;
+                    break;
+                }
+            }
+
+            // If PID is dead and progress < 100 and no error yet, mark as crashed
+            if ($pidExists === false && $status['progress'] < 100 && empty($status['error'])) {
+                $status['error'] = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté et alimenté.';
+                $status['phase'] = 'Error';
+
+                // Update status file
+                file_put_contents($statusPath, json_encode($status, JSON_PRETTY_PRINT));
+
+                log::add('fidelixUpdater', 'error', "Process {$updateId} (PID: {$pid}) died unexpectedly at {$status['progress']}%");
+            }
+
+            // Update process registry with current status (after potential error detection)
+            fidelixUpdater::updateProcessStatus($updateId, $status);
+        }
+
+        // Add PID info to response
+        $status['pidExists'] = $pidExists;
+        $status['pid'] = $pid;
 
         ajax::success($status);
     }
@@ -273,9 +329,47 @@ JSCODE;
     }
 
     // ========================================
+    // ACTION: getProcesses
+    // ========================================
+    if (init('action') == 'getProcesses') {
+        // Sync all running processes with their status files first
+        fidelixUpdater::syncActiveProcesses();
+
+        $active = fidelixUpdater::getActiveProcesses();
+        $history = fidelixUpdater::getProcessHistory(50);
+
+        ajax::success(array(
+            'active' => $active,
+            'history' => $history
+        ));
+    }
+
+    // ========================================
+    // ACTION: killProcess
+    // ========================================
+    if (init('action') == 'killProcess') {
+        $updateId = init('updateId');
+
+        if (empty($updateId)) {
+            throw new Exception('updateId non spécifié');
+        }
+
+        // Sanitize updateId
+        $updateId = preg_replace('/[^a-zA-Z0-9._-]/', '', $updateId);
+
+        // Kill the process
+        fidelixUpdater::killProcess($updateId);
+
+        ajax::success('Process killed successfully');
+    }
+
+    // ========================================
     // ACTION: testConnection
     // ========================================
     if (init('action') == 'testConnection') {
+        // Sync processes with status files first
+        fidelixUpdater::syncActiveProcesses();
+
         $port = init('port');
         $address = (int)init('address');
         $baudRate = (int)init('baudRate', 19200);
@@ -286,6 +380,11 @@ JSCODE;
 
         if (empty($address) || $address < 1 || $address > 247) {
             throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
+        }
+
+        // Check if THIS specific port is locked
+        if (fidelixUpdater::isPortLocked($port)) {
+            throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter avant de tester la connexion.');
         }
 
         log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address . ', BaudRate: ' . $baudRate);

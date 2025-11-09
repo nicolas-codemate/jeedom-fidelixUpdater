@@ -19,7 +19,7 @@ const fxFwUpdate = require('./FxMulti24/').fxFwUpdate();
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
 //var FILETRANSFERDIR = path.normalize(process.env.ROOTDIR + path.sep + "filetransfer");
-var FILETRANSFERDIR = path.normalize("/srv/plugins/fidelixUpdater/data/filetransfer");  // PATCHED: Changed plugin name and fixed Docker path
+var FILETRANSFERDIR = path.normalize(__dirname + "/../../../data/filetransfer");  // PATCHED: Use relative path for portability (works in Docker and standard Jeedom)
 
 
 const logFilePath = path.resolve(__dirname, './logsJeedom.txt');
