@@ -1,5 +1,6 @@
 # Sensitive documentation (C# code, customer emails, internal dev docs)
 docs/context/
+docs/context
 CLAUDE.md
 
 # Firmware and software files (potentially sensitive)

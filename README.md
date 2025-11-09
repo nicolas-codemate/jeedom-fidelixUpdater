@@ -12,9 +12,9 @@ Plugin Jeedom pour mettre à jour le firmware et le software des modules **Fidel
 - [Présentation](#-présentation)
 - [Fonctionnalités](#-fonctionnalités)
 - [Prérequis](#-prérequis)
+- [Installation](#-installation)
 - [Utilisation](#-utilisation)
 - [Mode Pass-Through](#-mode-pass-through)
-- [Dépannage](#-dépannage)
 - [Support](#-support)
 - [Licence](#-licence)
 
@@ -23,6 +23,8 @@ Plugin Jeedom pour mettre à jour le firmware et le software des modules **Fidel
 ## 🎯 Présentation
 
 **Fidelix Updater** permet de mettre à jour à distance les automates Fidelix Multi24 directement depuis l'interface Jeedom.
+
+**📍 Emplacement :** Le plugin se trouve dans le menu **Plugins → Programmation → Fidelix Updater**
 
 ### Types de mise à jour supportés
 
@@ -79,6 +81,42 @@ sudo usermod -a -G dialout www-data
 
 ---
 
+## 🔧 Installation
+
+### 1. Installation du plugin
+
+1. **Télécharger le plugin** depuis le Market Jeedom ou installer manuellement
+2. **Activer le plugin** depuis la page des plugins
+3. **Accéder à la configuration** : Plugins → Programming → Fidelix Updater → Configuration
+
+### 2. Diagnostic système
+
+Accédez à la page de configuration du plugin pour vérifier que tous les prérequis sont satisfaits :
+
+```
+Jeedom → Plugins → Programming → Fidelix Updater → Configuration
+```
+
+Le diagnostic vérifie automatiquement :
+- ✅ Node.js (version 12+)
+- ✅ Groupe dialout (permissions port série)
+- ✅ Dépendances npm (serialport, etc.)
+- ✅ Ports série disponibles
+
+### 3. Bouton "Reconfigurer les permissions"
+
+Si le diagnostic affiche des erreurs ou avertissements, utilisez le bouton **"Reconfigurer les permissions"** disponible sur la page de configuration.
+
+Ce bouton corrige automatiquement :
+- Ajout de www-data au groupe dialout
+- Installation des dépendances npm
+- Permissions des ports série
+- Permissions des dossiers du plugin
+
+**Utilisation :** Cliquez sur le bouton, attendez 10-30 secondes, puis rechargez la page pour vérifier que tous les voyants sont verts.
+
+---
+
 ## 📝 Utilisation
 
 ### Mise à jour simple (mode direct)
@@ -101,19 +139,6 @@ sudo usermod -a -G dialout www-data
 5. **Suivre la progression**
    La barre de progression se met à jour en temps réel (2-15 minutes selon la taille)
 
-### Interface de mise à jour
-
-```
-┌─────────────────────────────────────────────┐
-│  Type de mise à jour : [Firmware ▼]        │
-│  Fichier : [Parcourir...] Multi24-v2.81.hex│
-│  Adresse : [1        ]                      │
-│  Sous-adresse : [    ] (Optionnel)          │
-│  Port série : [/dev/ttyUSB0 ▼]             │
-│  [Démarrer la mise à jour]                  │
-└─────────────────────────────────────────────┘
-```
-
 ---
 
 ## 🔗 Mode Pass-Through
@@ -123,17 +148,44 @@ Le **mode pass-through** permet de mettre à jour un module **esclave** en passa
 ### Architecture réseau typique
 
 ```
-JEEDOM (Maître Modbus)
+JEEDOM (Maître Modbus ROUGE)
     │
-    ├── Multi24 Maître #1 (Adresse 1)
-    │       └── Modbus esclave
-    │           ├── Multi24 Esclave (Adresse 10)
-    │           ├── Multi24 Esclave (Adresse 11)
-    │           └── Multi24 Esclave (Adresse 12)
+    ├── Multi24 Maître #1 (Addr 1) ──┬── Modbus BLEU ──> Multi24 Esclave (Addr 10)
+    │                                 ├── Modbus BLEU ──> Multi24 Esclave (Addr 11)
+    │                                 └── Modbus BLEU ──> Multi24 Esclave (Addr 12)
     │
-    └── Multi24 Maître #2 (Adresse 2)
-            └── Modbus esclave
-                └── Multi24 Esclave (Adresse 20)
+    └── Multi24 Maître #2 (Addr 2) ── Modbus BLEU ──> Multi24 Esclave (Addr 20)
+```
+
+**Légende :**
+- **Modbus ROUGE** : Bus principal Jeedom ↔ Maîtres
+- **Modbus BLEU** : Bus esclave Maître ↔ Esclaves
+
+### Mécanisme d'adressage
+
+Le mode pass-through utilise un système d'**incrémentation/décrémentation** d'adresse pour router les trames Modbus :
+
+**Fonctionnement :**
+
+1. La trame Modbus commence par l'**adresse du maître** (adresse principale)
+2. L'adresse esclave est **incrémentée de +1** avant envoi
+3. Le maître reçoit, **relaye** sur son bus esclave (Modbus BLEU)
+4. L'esclave répond au maître
+5. Le maître renvoie la réponse à Jeedom avec l'adresse **décrémentée de -1**
+
+**Exemple concret :**
+
+```
+Configuration :
+  Adresse : 1 (maître)
+  Sous-adresse : 10 (esclave cible)
+
+Étapes :
+  1. Jeedom envoie trame → Adresse 1 (maître)
+  2. Maître incrémente → Adresse 11 (10 + 1)
+  3. Maître relaye sur bus BLEU → Esclave à l'adresse réelle 10 répond
+  4. Maître décrémente → Adresse 10 (11 - 1)
+  5. Jeedom reçoit la réponse de l'adresse 10
 ```
 
 ### Utilisation
@@ -154,109 +206,33 @@ Sous-adresse : 10
 ```
 → Met à jour le Multi24 **esclave** à l'adresse 10 en passant par le maître à l'adresse 1
 
+#### Exemple 3 : Multiple esclaves
+
+```
+Scénario : Mettre à jour tous les esclaves derrière le maître #1
+
+Mise à jour 1 :
+  Adresse : 1
+  Sous-adresse : 10
+  → Esclave #10
+
+Mise à jour 2 :
+  Adresse : 1
+  Sous-adresse : 11
+  → Esclave #11
+
+Mise à jour 3 :
+  Adresse : 1
+  Sous-adresse : 12
+  → Esclave #12
+```
+
 ### Cas d'usage
 
-✅ Mettre à jour tous les modules d'une zone sans recâblage
+✅ Mettre à jour tous les modules d'une zone sans recâblage physique
 ✅ Accéder à des modules non directement connectés au bus Modbus principal
 ✅ Déploiement de mises à jour sur une architecture hiérarchisée
-
----
-
-## 🐛 Dépannage
-
-### Le plugin ne s'affiche pas dans Jeedom
-
-```bash
-# Vérifier les permissions
-sudo chown -R www-data:www-data /var/www/html/plugins/fidelixUpdater
-
-# Vider le cache Jeedom
-sudo rm -rf /tmp/jeedom/cache/*
-```
-
-### Erreur "Permission denied" sur le port série
-
-```bash
-# Vérifier l'appartenance au groupe dialout
-groups www-data
-
-# Si dialout n'apparaît pas :
-sudo usermod -a -G dialout www-data
-sudo systemctl restart apache2
-```
-
-### La mise à jour échoue systématiquement
-
-**Vérifications :**
-
-1. **Adresse Modbus** : Vérifier que l'adresse correspond au module
-2. **Port série** : Utiliser `/dev/serial/by-id/...` pour éviter les changements
-3. **Connexion physique** : Vérifier le câblage RS485 (A, B, GND)
-4. **Alimentation** : Le module doit être alimenté pendant toute la mise à jour
-
-**Logs :**
-
-```bash
-# Consulter les logs Jeedom
-tail -f /var/www/html/log/fidelixUpdater
-
-# Consulter les logs Node.js
-tail -f /var/www/html/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib/logsJeedom.txt
-```
-
-### Le module ne répond plus après une mise à jour échouée
-
-**Le plugin intègre un mécanisme de récupération automatique.**
-
-Si le module reste bloqué :
-
-1. Couper l'alimentation du module
-2. Attendre 10 secondes
-3. Rallumer le module
-4. Relancer la mise à jour
-
----
-
-## 💡 Conseils et bonnes pratiques
-
-### Avant une mise à jour
-
-✅ **Sauvegarder** la configuration actuelle du module
-✅ **Vérifier** la compatibilité du firmware avec le matériel
-✅ **Tester** d'abord sur un module non-critique
-✅ **Planifier** la mise à jour en dehors des heures de production
-
-### Pendant une mise à jour
-
-⚠️ **Ne pas déconnecter** le module
-⚠️ **Ne pas couper** l'alimentation
-⚠️ **Attendre** la fin complète (5-15 minutes)
-
-### Après une mise à jour
-
-✅ **Vérifier** que le module redémarre correctement
-✅ **Tester** les fonctionnalités critiques
-✅ **Consulter** les logs en cas d'anomalie
-
----
-
-## 🔧 Caractéristiques techniques
-
-| Paramètre | Valeur |
-|-----------|--------|
-| **Protocol** | Modbus RTU |
-| **Vitesse** | 57600 bauds |
-| **Bits de données** | 8 |
-| **Parité** | Aucune |
-| **Bits d'arrêt** | 1 |
-| **Timeout** | 3000 ms |
-| **Retries** | 10 tentatives |
-| **Délai sécurité** | 500 ms entre opérations critiques |
-
-### Durée des mises à jour
-
-- **Firmware** (.hex) : 5-15 minutes (selon taille du fichier)
-- **Software** (.M24IEC) : 3-8 minutes (selon taille du fichier)
+✅ Maintenance à distance de modules esclaves inaccessibles physiquement
 
 ---
 
