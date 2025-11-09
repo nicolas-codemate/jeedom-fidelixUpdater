@@ -102,6 +102,7 @@ if (!isConnect('admin')) {
                 <ul>
                     <li>{{La mise à jour peut prendre 5 à 15 minutes}}</li>
                     <li>{{Ne pas déconnecter le module pendant la mise à jour}}</li>
+                    <li>{{Assurez-vous que l'adresse Modbus du module est correcte (1-247)}}</li>
                     <li>{{Le module redémarrera automatiquement après la mise à jour}}</li>
                     <li>{{En cas d'échec, le module tentera de récupérer automatiquement}}</li>
                 </ul>
@@ -121,6 +122,9 @@ if (!isConnect('admin')) {
     <div class="row" id="progressSection" style="display: none;">
         <div class="col-lg-12">
             <hr>
+            <div class="alert alert-info" style="margin-bottom: 15px;">
+                <i class="fas fa-info-circle"></i> {{Le processus de mise à jour s'exécute en arrière-plan. Vous pouvez fermer cette fenêtre et suivre la progression depuis la page principale du plugin.}}
+            </div>
             <h4 id="phaseText">{{Initialisation...}}</h4>
             <div class="progress" style="height: 30px;">
                 <div id="progressBar" class="progress-bar progress-bar-striped active" role="progressbar" style="width: 0%; min-width: 3em;">
