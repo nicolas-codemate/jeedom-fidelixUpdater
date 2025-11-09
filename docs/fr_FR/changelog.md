@@ -16,11 +16,6 @@
 - ✨ Diagnostic système avec correction automatique des permissions
 - ✨ Support Modbus RTU à 57600 bauds
 
-**Optimisations :**
-- 🚀 10 tentatives de retry pour une fiabilité maximale
-- 🚀 Timeout de 3000ms pour les communications Modbus
-- 🚀 Délai de sécurité de 500ms entre opérations critiques
-
 **Interface :**
 - 🎨 Modal de mise à jour avec sélection fichier + configuration
 - 🎨 Barre de progression en temps réel avec polling toutes les 2 secondes
