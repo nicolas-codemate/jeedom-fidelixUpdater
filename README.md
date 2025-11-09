@@ -12,6 +12,7 @@ Plugin Jeedom pour mettre à jour le firmware et le software des modules **Fidel
 - [Présentation](#-présentation)
 - [Fonctionnalités](#-fonctionnalités)
 - [Prérequis](#-prérequis)
+- [Installation](#-installation)
 - [Utilisation](#-utilisation)
 - [Mode Pass-Through](#-mode-pass-through)
 - [Dépannage](#-dépannage)
@@ -76,6 +77,174 @@ L'utilisateur `www-data` doit avoir accès au port série :
 ```bash
 sudo usermod -a -G dialout www-data
 ```
+
+---
+
+## 🔧 Installation
+
+### 1. Installation du plugin
+
+1. **Télécharger le plugin** depuis le Market Jeedom ou installer manuellement
+2. **Activer le plugin** depuis la page des plugins
+3. **Accéder à la configuration** : Plugins → Programming → Fidelix Updater → Configuration
+
+### 2. Tests de diagnostic (OBLIGATOIRE avant toute mise à jour)
+
+Avant de procéder à une mise à jour de module, il est **impératif** de vérifier que tous les prérequis sont satisfaits.
+
+**Accès au diagnostic :**
+```
+Jeedom → Plugins → Programming → Fidelix Updater → Configuration
+```
+
+Le plugin affiche automatiquement un **diagnostic système complet** avec 4 vérifications :
+
+#### ✅ Node.js installé
+- **Requis** : Version 12 ou supérieure
+- **Vérification** : Affiche la version installée
+- ❌ **Si absent** : Installer Node.js sur le système
+
+```bash
+# Installer Node.js sur Debian/Ubuntu
+curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+#### ✅ Groupe dialout (permissions port série)
+- **Requis** : L'utilisateur `www-data` doit être dans le groupe `dialout`
+- **Vérification** : Affiche les groupes de l'utilisateur `www-data`
+- ⚠️ **Si absent** : Utiliser le bouton "Reconfigurer les permissions" (voir ci-dessous)
+
+#### ✅ Dépendances npm installées
+- **Requis** : Package `serialport` et dépendances
+- **Vérification** : Affiche le chemin d'installation des modules npm
+- ⚠️ **Si absent** : Utiliser le bouton "Reconfigurer les permissions" (voir ci-dessous)
+
+#### ✅ Ports série détectés
+- **Optionnel** : Affiche tous les ports série disponibles et leurs permissions
+- **État** :
+  - 🟢 **Accessible** : Le port peut être utilisé pour la mise à jour
+  - 🟠 **Permissions insuffisantes** : Utiliser le bouton "Reconfigurer les permissions"
+- ℹ️ **Note** : Si aucun port série n'est détecté, c'est normal si aucun adaptateur USB-RS485 n'est connecté
+
+### 3. Bouton "Reconfigurer les permissions"
+
+Le bouton **"Reconfigurer les permissions"** corrige automatiquement **tous les problèmes de configuration** détectés.
+
+#### Ce que fait ce bouton :
+
+1. **Ajoute www-data au groupe dialout**
+   ```bash
+   sudo usermod -a -G dialout www-data
+   ```
+   → Permet l'accès aux ports série
+
+2. **Installe les dépendances npm**
+   ```bash
+   cd /var/www/html/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib
+   sudo npm install
+   ```
+   → Installe `serialport`, `q`, `fs-extra` et autres dépendances
+
+3. **Corrige les permissions des ports série**
+   ```bash
+   sudo chmod 666 /dev/ttyUSB* /dev/ttyACM*
+   ```
+   → Rend les ports série accessibles immédiatement
+
+4. **Configure les permissions des dossiers**
+   ```bash
+   sudo chown -R www-data:www-data /var/www/html/plugins/fidelixUpdater
+   ```
+   → Assure que le plugin peut écrire les fichiers temporaires
+
+#### Quand utiliser ce bouton ?
+
+✅ **Première installation du plugin**
+✅ Après une mise à jour de Jeedom ou du système d'exploitation
+✅ Si le diagnostic affiche des erreurs ou avertissements
+✅ Si les mises à jour échouent avec "Permission denied"
+✅ Après connexion d'un nouvel adaptateur USB-RS485
+
+#### Utilisation
+
+1. **Cliquer sur le bouton** "Reconfigurer les permissions"
+2. **Attendre** 10-30 secondes (installation des dépendances npm)
+3. **Vérifier** que le message "Configuration réussie !" apparaît
+4. **Recharger** la page (automatique après 2 secondes)
+5. **Confirmer** que tous les voyants sont verts ✅
+
+**Exemple de diagnostic après correction :**
+
+```
+✅ Node.js installé
+   Version: v16.20.0
+
+✅ Groupe dialout (permissions port série)
+   Groupes: www-data dialout
+
+✅ Dépendances npm installées
+   Installées dans: /var/www/html/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib/node_modules
+
+✅ Ports série détectés
+   /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9D5YQVH-if00-port0
+   ✅ Accessible
+   FTDI FT232R USB UART
+```
+
+### 4. Tests de fonctionnement recommandés
+
+Avant de mettre à jour un module critique, il est recommandé de :
+
+#### Test 1 : Vérifier la communication Modbus
+
+Utiliser le bouton **"Tester la connexion"** sur la page principale pour vérifier que Jeedom peut communiquer avec le module.
+
+**Paramètres de test :**
+- Adresse : Adresse Modbus du module (1-247)
+- Port série : Sélectionner le port RS485
+
+**Résultat attendu :**
+```
+✅ Connexion établie avec le module à l'adresse 1
+   Modèle: Multi24
+   Version: 2.80
+```
+
+#### Test 2 : Test de mise à jour sur module non-critique
+
+Pour une première utilisation, **tester d'abord sur un module non-critique** :
+
+1. Préparer un fichier de mise à jour de test
+2. Lancer la mise à jour sur un module de développement
+3. Vérifier que la progression s'affiche correctement
+4. Attendre la fin complète de la mise à jour
+5. Vérifier que le module redémarre correctement
+
+#### Test 3 : Vérifier les logs
+
+Consulter les logs pour s'assurer qu'il n'y a pas d'erreurs :
+
+```bash
+# Logs Jeedom
+tail -f /var/www/html/log/fidelixUpdater
+
+# Logs Node.js
+tail -f /var/www/html/plugins/fidelixUpdater/3rdparty/Fidelix/FxLib/logsJeedom.txt
+```
+
+### 5. Checklist de validation
+
+Avant de mettre à jour un module en production :
+
+- [ ] Tous les voyants du diagnostic sont verts ✅
+- [ ] Le bouton "Reconfigurer les permissions" a été exécuté avec succès
+- [ ] Au moins un port série est détecté et accessible
+- [ ] La communication Modbus fonctionne (test de connexion réussi)
+- [ ] Un test de mise à jour a été effectué sur un module non-critique
+- [ ] Les logs ne montrent aucune erreur critique
+
+**Si tous ces points sont validés, le plugin est prêt pour une mise à jour en production. ✅**
 
 ---
 
