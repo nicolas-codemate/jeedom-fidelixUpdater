@@ -3,6 +3,7 @@
 ## Table des matières
 
 - [Vue d'ensemble](#vue-densemble)
+- [Prérequis et configuration initiale](#prérequis-et-configuration-initiale)
 - [Utilisation détaillée](#utilisation-détaillée)
 - [Architecture asynchrone](#architecture-asynchrone)
 - [Communication Modbus](#communication-modbus)
@@ -39,6 +40,59 @@ Fidelix Updater est un plugin Jeedom permettant de mettre à jour le firmware et
 
 - **Firmware** (`.hex`) : Bootloader et système bas niveau
 - **Software** (`.M24IEC`) : Application embarquée
+
+---
+
+## Prérequis et configuration initiale
+
+Avant d'utiliser le plugin, certains prérequis système doivent être satisfaits :
+
+### Prérequis logiciels
+
+- **Node.js** version 12 ou supérieure
+- Package Node.js `serialport` (installé automatiquement)
+- **Port série** accessible (`/dev/ttyUSB*` ou `/dev/serial/by-id/...`)
+
+### Permissions système
+
+L'utilisateur `www-data` doit avoir accès au port série via le groupe `dialout`.
+
+### Diagnostic système
+
+Lors de la première utilisation, accédez à la page de configuration du plugin pour vérifier l'état des prérequis :
+
+**Chemin :** `Plugins → Programmation → Fidelix Updater → Configuration`
+
+Le diagnostic vérifie automatiquement :
+- Node.js (version 12+)
+- Groupe dialout (permissions port série)
+- Dépendances npm (serialport, etc.)
+- Ports série disponibles
+
+### Correction automatique des permissions
+
+Si le diagnostic affiche des erreurs ou des avertissements, utilisez le bouton **"Reconfigurer les permissions"** disponible sur la page de configuration.
+
+Ce bouton corrige automatiquement :
+- Ajout de `www-data` au groupe `dialout`
+- Installation des dépendances npm manquantes
+- Permissions des ports série
+- Permissions des dossiers du plugin
+
+**Utilisation :** Cliquez sur le bouton, attendez 10-30 secondes, puis rechargez la page pour vérifier que tous les voyants sont au vert.
+
+### Test de fonctionnement
+
+Une fois les prérequis satisfaits, vous pouvez tester le plugin :
+
+1. Accédez à la page principale du plugin : **Plugins → Programmation → Fidelix Updater**
+2. Cliquez sur le bouton **"Tester la communication"**
+3. Le plugin vérifiera :
+   - La disponibilité du port série
+   - La communication Modbus avec le module
+   - Les permissions d'accès
+
+Si le test réussit, le plugin est prêt à effectuer des mises à jour. En cas d'échec, consultez la section [Dépannage](#dépannage) pour résoudre les problèmes.
 
 ---
 
@@ -184,27 +238,6 @@ Format JSON du fichier `data/status/status_{updateId}.json` :
 
 ## Communication Modbus
 
-### Protocole utilisé
-
-- **Type :** Modbus RTU
-- **Interface :** RS485 (2 fils : A et B)
-- **Vitesse :** 57600 bauds
-- **Bits de données :** 8
-- **Parité :** Aucune
-- **Bits d'arrêt :** 1
-
-### Configuration série
-
-**Format de configuration :**
-```
-57600 8N1
-```
-
-**Adaptateur RS485 requis :**
-- USB vers RS485
-- Pilote FTDI recommandé
-- Auto-détecté dans `/dev/serial/by-id/`
-
 ### Timeouts et retries
 
 **Timeouts :**
@@ -216,28 +249,6 @@ Format JSON du fichier `data/status/status_{updateId}.json` :
 - Délai entre tentatives critiques : **500 ms**
 
 Ces valeurs ont été optimisées pour assurer une fiabilité maximale des mises à jour.
-
-### Mode pass-through
-
-Le mode pass-through permet d'atteindre un module **esclave** en passant par un module **maître**.
-
-**Fonctionnement :**
-
-1. La trame Modbus est envoyée au **maître** (adresse principale)
-2. Le maître **incrémente** l'adresse de +1 et **relaye** sur son bus esclave
-3. L'esclave répond au maître
-4. Le maître **décrémente** l'adresse de -1 et renvoie à Jeedom
-
-**Exemple :**
-```
-Adresse : 1 (maître)
-Sous-adresse : 10 (esclave cible)
-
-→ Trame envoyée à l'adresse 1
-→ Maître relaye à l'adresse 11 (10+1)
-→ Esclave à l'adresse réelle 10 répond
-→ Maître renvoie avec adresse 10 (11-1)
-```
 
 ---
 
@@ -305,12 +316,12 @@ L'historique est automatiquement limité aux **100 dernières entrées** pour é
 Le plugin affiche en temps réel tous les **processus de mise à jour en cours**.
 
 **Informations affichées :**
-- 🆔 ID du processus
-- 📦 Type (firmware/software)
-- 🎯 Adresse cible
-- 📊 Progression (%)
-- ⏱️ Durée écoulée
-- 📍 Phase actuelle
+- ID du processus
+- Type (firmware/software)
+- Adresse cible
+- Progression (%)
+- Durée écoulée
+- Phase actuelle
 
 ![Capture - Processus actifs](./images/active_processes.png)
 
