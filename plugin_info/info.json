@@ -13,27 +13,18 @@
 	"hasDependency": true,
 	"hasOwnDeamon": false,
 	"maxDependancyInstallTime": 10,
-	"changelog": "https://github.com/yourusername/fidelixUpdater/changelog",
-	"documentation": "https://github.com/yourusername/fidelixUpdater/docs",
+	"changelog": "https://raw.githubusercontent.com/nicolas-codemate/jeedom-fidelixUpdater/main/docs/fr_FR/changelog.md",
+	"documentation": "https://github.com/nicolas-codemate/jeedom-fidelixUpdater/blob/main/docs/fr_FR/index.md",
 	"link": {
 		"forum": "",
 		"video": ""
 	},
 	"language": [
-		"fr_FR",
-		"en_US",
-		"es_ES",
-		"de_DE"
+		"fr_FR"
 	],
 	"compatibility": [
 		"smart",
 		"luna",
 		"atlas"
-	],
-	"functionality": {
-		"cron": {
-			"active": true,
-			"schedule": "0 3 * * *"
-		}
-	}
+	]
 }

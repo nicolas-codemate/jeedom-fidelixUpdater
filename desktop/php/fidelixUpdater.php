@@ -29,6 +29,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <br />
                 <span>{{Historique}}</span>
             </div>
+            <div class="cursor expertModeVisible" id="bt_pluginConfiguration" style="background-color:#767676;">
+                <i class="fas fa-cogs"></i>
+                <br />
+                <span>{{Configuration}}</span>
+            </div>
         </div>
 
         <legend><i class="fas fa-tasks"></i> {{Processus en cours}}</legend>
@@ -316,5 +321,9 @@ $('#bt_openHistoryModal').on('click', function() {
         height: 600
     });
     $('#md_modal').load('index.php?v=d&plugin=fidelixUpdater&modal=modal.history').dialog('open');
+});
+
+$('#bt_pluginConfiguration').on('click', function() {
+    window.location.href = 'index.php?v=d&p=plugin&id=fidelixUpdater';
 });
 </script>
