@@ -85,9 +85,32 @@ sudo usermod -a -G dialout www-data
 
 ### 1. Installation du plugin
 
-1. **Télécharger le plugin** depuis le Market Jeedom ou installer manuellement
-2. **Activer le plugin** depuis la page des plugins
-3. **Accéder à la configuration** : Plugins → Programming → Fidelix Updater → Configuration
+1. **Activer GitHub dans Jeedom**
+   - Aller dans **Réglages → Système → Configuration**
+   - Onglet **Mise à jour / Market**
+   - Sous-onglet **GitHub**
+   - Activer GitHub
+
+2. **Ajouter le plugin depuis GitHub**
+   - Aller dans **Plugins → Gestion des plugins**
+   - Cliquer sur le bouton **"+"** (Ajouter un plugin)
+   - Sélectionner **"Type de source : GitHub"**
+   - Remplir le formulaire :
+
+| Champ | Valeur |
+|-------|--------|
+| **ID logique du plugin** | `fidelixUpdater` |
+| **Utilisateur ou organisation du dépôt** | `nicolas-codemate` |
+| **Nom du dépôt** | `jeedom-fidelixUpdater` |
+| **Token (facultatif)** | _(laisser vide)_ |
+| **Branche** | `main` |
+
+3. **Activer le plugin**
+   - Le plugin apparaîtra dans la liste des plugins
+   - Cliquer sur **"Activer"**
+
+4. **Accéder à la configuration**
+   - **Plugins → Programmation → Fidelix Updater → Configuration**
 
 ### 2. Diagnostic système
 
