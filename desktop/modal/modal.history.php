@@ -162,7 +162,8 @@ $(document).ready(function() {
                         title: '{{Logs techniques}} - ' + (process.type === 'm24firmware' ? 'Firmware' : 'Software'),
                         width: 900,
                         height: 600,
-                        modal: true
+                        modal: true,
+                        closeText: ''  // Remove "Close" text, keep only X icon
                     }).dialog('open');
                 } else {
                     $.fn.showAlert({message: '{{Erreur:}} ' + data.result, level: 'danger'});
