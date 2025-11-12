@@ -86,15 +86,100 @@ class fidelixUpdater extends eqLogic {
     }
 
     /**
+     * Get absolute path to plugin directory
+     *
+     * @return string Absolute path to plugin root directory
+     */
+    public static function getPluginPath() {
+        static $pluginPath = null;
+
+        if ($pluginPath === null) {
+            $pluginPath = realpath(__DIR__ . '/../..');
+            if ($pluginPath === false) {
+                throw new Exception('Cannot resolve plugin directory path');
+            }
+            log::add('fidelixUpdater', 'debug', 'Plugin path resolved to: ' . $pluginPath);
+        }
+
+        return $pluginPath;
+    }
+
+    /**
+     * Get absolute path to data directory or subdirectory
+     *
+     * @param string $subdir Optional subdirectory name (e.g., 'filetransfer', 'status', 'logs')
+     * @return string Absolute path to data directory
+     */
+    public static function getDataPath($subdir = '') {
+        $path = self::getPluginPath() . '/data';
+
+        if (!empty($subdir)) {
+            $path .= '/' . trim($subdir, '/');
+        }
+
+        return $path;
+    }
+
+    /**
+     * Ensure directory exists and is writable, create if necessary
+     *
+     * @param string $path Directory path to ensure
+     * @param int $permissions Permissions to set (default: 0775)
+     * @return string Resolved absolute path
+     * @throws Exception If directory cannot be created or is not writable
+     */
+    public static function ensureDirectory($path, $permissions = 0775) {
+        // Resolve to absolute path if not already
+        if (!is_dir($path)) {
+            // Try to resolve parent directory first
+            $parent = dirname($path);
+            if (is_dir($parent)) {
+                $path = realpath($parent) . '/' . basename($path);
+            }
+        }
+
+        // Create directory if it doesn't exist
+        if (!file_exists($path)) {
+            log::add('fidelixUpdater', 'debug', 'Creating directory: ' . $path);
+
+            if (!mkdir($path, $permissions, true)) {
+                $error = error_get_last();
+                log::add('fidelixUpdater', 'error', 'Failed to create directory: ' . $path . ' - ' . ($error ? $error['message'] : 'Unknown error'));
+                throw new Exception('Cannot create directory: ' . $path);
+            }
+
+            chmod($path, $permissions);
+            log::add('fidelixUpdater', 'debug', 'Directory created successfully: ' . $path);
+        }
+
+        // Verify it's a directory
+        if (!is_dir($path)) {
+            log::add('fidelixUpdater', 'error', 'Path exists but is not a directory: ' . $path);
+            throw new Exception('Path exists but is not a directory: ' . $path);
+        }
+
+        // Verify it's writable
+        if (!is_writable($path)) {
+            log::add('fidelixUpdater', 'warning', 'Directory is not writable, attempting chmod: ' . $path);
+            chmod($path, $permissions);
+
+            if (!is_writable($path)) {
+                log::add('fidelixUpdater', 'error', 'Directory is not writable: ' . $path);
+                throw new Exception('Directory is not writable: ' . $path);
+            }
+        }
+
+        return realpath($path);
+    }
+
+    /**
      * Get path to processes registry file
      *
      * @return string Path to processes.json
      */
     private static function getProcessesFilePath() {
-        $dataPath = __DIR__ . '/../../data';
-        if (!file_exists($dataPath)) {
-            mkdir($dataPath, 0755, true);
-        }
+        $dataPath = self::getDataPath();
+        self::ensureDirectory($dataPath);
         return $dataPath . '/processes.json';
     }
 
@@ -103,7 +188,7 @@ class fidelixUpdater extends eqLogic {
      *
      * @return array Array of processes
      */
-    private static function loadProcessesRegistry() {
+    public static function loadProcessesRegistry() {
         $filePath = self::getProcessesFilePath();
 
         if (!file_exists($filePath)) {
@@ -150,7 +235,12 @@ class fidelixUpdater extends eqLogic {
             'startTime' => date('c'),
             'lastUpdate' => date('c'),
             'endTime' => null,
-            'error' => null
+            'error' => null,
+            // Log file paths for debugging
+            'logFiles' => array(
+                'nodejs' => isset($processData['nodejsLog']) ? $processData['nodejsLog'] : null,
+                'stderr' => isset($processData['stderrLog']) ? $processData['stderrLog'] : null
+            )
         );
 
         $registry['processes'][] = $process;
@@ -215,7 +305,7 @@ class fidelixUpdater extends eqLogic {
                 $needsUpdate = false;
 
                 // First, try to read the status file (always read it first!)
-                $statusFile = __DIR__ . '/../../data/status/status_' . $process['updateId'] . '.json';
+                $statusFile = self::getDataPath('status') . '/status_' . $process['updateId'] . '.json';
                 $statusData = null;
 
                 if (file_exists($statusFile)) {
@@ -409,7 +499,7 @@ class fidelixUpdater extends eqLogic {
      */
     public static function cleanupTempFiles() {
         $registry = self::loadProcessesRegistry();
-        $removed = array('status' => 0, 'scripts' => 0, 'uploads' => 0);
+        $removed = array('status' => 0, 'scripts' => 0, 'uploads' => 0, 'stderrlogs' => 0);
 
         // Get all active/running updateIds and their filenames
         $activeUpdateIds = array();
@@ -424,7 +514,7 @@ class fidelixUpdater extends eqLogic {
         }
 
         // Cleanup status files
-        $statusDir = __DIR__ . '/../../data/status';
+        $statusDir = self::getDataPath('status');
         if (is_dir($statusDir)) {
             $statusFiles = scandir($statusDir);
             foreach ($statusFiles as $file) {
@@ -439,7 +529,7 @@ class fidelixUpdater extends eqLogic {
         }
 
         // Cleanup script files
-        $dataDir = __DIR__ . '/../../data';
+        $dataDir = self::getDataPath();
         if (is_dir($dataDir)) {
             $scriptFiles = scandir($dataDir);
             foreach ($scriptFiles as $file) {
@@ -453,8 +543,48 @@ class fidelixUpdater extends eqLogic {
             }
         }
 
+        // Cleanup stderr log files (keep for 7 days for historical processes)
+        $logsDir = self::getDataPath('logs');
+        $oneWeekAgo = time() - (7 * 24 * 60 * 60); // 7 days
+        if (is_dir($logsDir)) {
+            $logFiles = scandir($logsDir);
+            foreach ($logFiles as $file) {
+                if (strpos($file, 'nodejs_update_') === 0 && strpos($file, '.log') !== false) {
+                    $updateId = str_replace(array('nodejs_', '.log'), '', $file);
+
+                    // Keep logs for active processes
+                    if (in_array($updateId, $activeUpdateIds)) {
+                        continue;
+                    }
+
+                    // For completed/failed processes, check if older than 7 days
+                    $process = null;
+                    foreach ($registry['processes'] as $p) {
+                        if ($p['updateId'] === $updateId) {
+                            $process = $p;
+                            break;
+                        }
+                    }
+
+                    // If process found and has endTime, check age
+                    if ($process && isset($process['endTime'])) {
+                        $endTime = strtotime($process['endTime']);
+                        if ($endTime < $oneWeekAgo) {
+                            // Process ended more than 7 days ago, remove log
+                            @unlink($logsDir . '/' . $file);
+                            $removed['stderrlogs']++;
+                        }
+                    } else {
+                        // Process not in registry or no endTime, remove orphaned log
+                        @unlink($logsDir . '/' . $file);
+                        $removed['stderrlogs']++;
+                    }
+                }
+            }
+        }
+
         // Cleanup uploaded firmware/software files (only if not in use by running process)
-        $filetransferDir = __DIR__ . '/../../data/filetransfer';
+        $filetransferDir = self::getDataPath('filetransfer');
         if (is_dir($filetransferDir)) {
             $uploadedFiles = scandir($filetransferDir);
             foreach ($uploadedFiles as $file) {
@@ -493,7 +623,7 @@ class fidelixUpdater extends eqLogic {
         // Cleanup temporary files
         $removedFiles = self::cleanupTempFiles();
 
-        log::add('fidelixUpdater', 'info', "Cron cleanup completed: synced={$synced}, removed_processes={$removedProcesses}, removed_status_files={$removedFiles['status']}, removed_script_files={$removedFiles['scripts']}, removed_upload_files={$removedFiles['uploads']}");
+        log::add('fidelixUpdater', 'info', "Cron cleanup completed: synced={$synced}, removed_processes={$removedProcesses}, removed_status_files={$removedFiles['status']}, removed_script_files={$removedFiles['scripts']}, removed_stderr_logs={$removedFiles['stderrlogs']}, removed_upload_files={$removedFiles['uploads']}");
     }
 
     /**
@@ -605,12 +735,14 @@ class fidelixUpdater extends eqLogic {
 
     /**
      * Cleanup temporary files for a process
+     * Note: stderr logs are kept for historical processes and cleaned by cron after 7 days
      *
      * @param string $updateId Process update ID
      */
     private static function cleanupProcessFiles($updateId) {
-        $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
-        $scriptFile = __DIR__ . '/../../data/update_' . $updateId . '.js';
+        $statusFile = self::getDataPath('status') . '/status_' . $updateId . '.json';
+        $scriptFile = self::getDataPath() . '/update_' . $updateId . '.js';
+        // Note: We keep stderr logs for historical processes (they will be cleaned by cron after 7 days)
 
         @unlink($statusFile);
         @unlink($scriptFile);

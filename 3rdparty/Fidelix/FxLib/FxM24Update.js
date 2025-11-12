@@ -239,29 +239,66 @@ function fxM24Update() {
 
         try {
           console.log('Debut de la lecture du fichier de mise à jour')
-          fileToHandle = FILETRANSFERDIR + path.sep + filename;	
-          // Read file          
+
+          // PATCHED: Support both absolute paths (new) and relative filenames (backward compatibility)
+          if (path.isAbsolute(filename)) {
+            // Filename is already an absolute path, use it directly
+            fileToHandle = filename;
+            console.log('Using absolute path: ' + fileToHandle);
+          } else {
+            // Filename is relative, construct full path (backward compatibility)
+            fileToHandle = FILETRANSFERDIR + path.sep + filename;
+            console.log('Constructed path from filename: ' + fileToHandle);
+          }
+
+          // Verify file exists before attempting to read
+          if (!fs.existsSync(fileToHandle)) {
+            throw new Error("File not found: " + fileToHandle);
+          }
+
+          console.log('Reading file: ' + fileToHandle);
+          // Read file
           data = fs.readFileSync(fileToHandle);
-          // Remove file
-          fs.unlinkSync(fileToHandle);          
+
+          console.log('File read successfully, size: ' + data.length + ' bytes');
+
+          // PATCHED: Keep file until programming succeeds (moved deletion to end)
+          // Will be deleted in .then() after successful programming or in .catch() on error
+          console.log('Keeping file for programming: ' + fileToHandle);
         }
         catch(err) {
-          fxLog.error("Error in reading file " + fileToHandle);
-          console.log('Erreur sur la lecture du fichier')
-          if (fileToHandle != null) {
-            fs.unlinkSync(fileToHandle);
+          fxLog.error("Error in reading file " + fileToHandle + ": " + err.message);
+          console.log('Erreur sur la lecture du fichier: ' + err.message)
+          if (fileToHandle != null && fs.existsSync(fileToHandle)) {
+            try {
+              fs.unlinkSync(fileToHandle);
+              console.log('Cleaned up file after read error: ' + fileToHandle);
+            } catch (unlinkErr) {
+              console.log('Failed to clean up file: ' + unlinkErr.message);
+            }
           }
-          throw("Can't read file");
+          throw("Can't read file: " + err.message);
         }
 
         options.data = Buffer.from(data);  // PATCHED: new Buffer() deprecated, use Buffer.from()
+        options.fileToHandle = fileToHandle; // PATCHED: Store file path for later cleanup
         fxLog.debug('File read length', options.data.length);
         fxLog.debug('Start programming');
-        console.log('Start programming')
+        console.log('Start programming, data buffer size: ' + options.data.length + ' bytes')
         return Q.resolve();
     })
     .then(Q.fbind(device.program, options)) // DO PROGRAM
     .then(function() {                      // SUCCEEDED
+      console.log('Programming completed successfully');
+      // PATCHED: Delete file after successful programming
+      if (options.fileToHandle && fs.existsSync(options.fileToHandle)) {
+        try {
+          fs.unlinkSync(options.fileToHandle);
+          console.log('Temporary file deleted after successful programming: ' + options.fileToHandle);
+        } catch (unlinkErr) {
+          console.log('Warning: Failed to delete temporary file: ' + unlinkErr.message);
+        }
+      }
       console.log('Mise à jour effectuée avec succès')
       fxLog.debug("Update succeeded...");
       deferred.resolve();
@@ -270,6 +307,16 @@ function fxM24Update() {
         // PATCHED: Added recovery mechanism to prevent device bricking
         fxLog.error("Update failed, attempting recovery... " + err);
         console.log("Update failed, attempting recovery: " + err);
+
+        // PATCHED: Cleanup uploaded file on error
+        if (options.fileToHandle && fs.existsSync(options.fileToHandle)) {
+            try {
+                fs.unlinkSync(options.fileToHandle);
+                console.log('Temporary file deleted after programming error: ' + options.fileToHandle);
+            } catch (unlinkErr) {
+                console.log('Warning: Failed to delete temporary file after error: ' + unlinkErr.message);
+            }
+        }
 
         // PATCHED: Write error to status file immediately
         if (self.statusFile) {

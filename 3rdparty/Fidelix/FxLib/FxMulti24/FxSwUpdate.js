@@ -232,42 +232,66 @@ function fxSwUpdate() {
 			})
 			// OPEN CONNECTION
 			.then(Q.fbind(notifyProgress, {status : "Opening connection...", progress : 2}))
-			.then(Q.fbind(self.openConnection, m_Options.port, m_Options))
-			// SET DEVICE TO THE PASS-THROUGH MODE			
+			.then(function() {
+				console.log('[FxSwUpdate] Opening connection to port:', m_Options.port);
+				return Q.fbind(self.openConnection, m_Options.port, m_Options)();
+			})
+			.then(function() {
+				console.log('[FxSwUpdate] Connection opened successfully');
+			})
+			// SET DEVICE TO THE PASS-THROUGH MODE
 			.then(function() {
 
 				// If pass-through address is 0, do nothing (no pass-through mode)
 				if (self.passThroughModule.address !== 0) {
-								
+					console.log('[FxSwUpdate] Activating pass-through mode for address:', self.passThroughModule.address);
+
 					return (
 						// Activate pass-through mode by boot mode command...
 						notifyProgress({status : "Activating pass-through mode...", progress : 5})
 						.then(Q.fbind(repeatUntilResolvedOrNoRetriesLeft, Q.fbind(self.setupBootMode, true, false), 100, NUM_OF_RETRIES))
+						.then(function() {
+							console.log('[FxSwUpdate] Pass-through mode activated successfully');
+						})
 						.catch(function (err) {
 							// Error occured
+							console.error('[FxSwUpdate] Failed to activate pass-through mode:', err);
 							return Q.reject("Unable to activate pass-through mode : " + err);
 						})
 					)
+				} else {
+					console.log('[FxSwUpdate] Skipping pass-through mode (address is 0)');
 				}
 			})
 			.delay(500)  // PATCHED: Was 100ms, increased to 500ms for device stability
 			// SET DEVICE TO THE PROGRAMMING MODE
-			.then(Q.fbind(notifyProgress, {status : "Setting up device to the programming mode...", progress : 7}))		
+			.then(Q.fbind(notifyProgress, {status : "Setting up device to the programming mode...", progress : 7}))
 			.then(function() {
-				
+				console.log('[FxSwUpdate] Setting device to programming mode...');
+
 				return (
 					// Set device to the programming mode
 					repeatUntilResolvedOrNoRetriesLeft(Q.fbind(self.startSwProgramming), 100, NUM_OF_RETRIES)
+					.then(function() {
+						console.log('[FxSwUpdate] Device set to programming mode successfully');
+					})
 					.catch(function(err) {
 						// Error occured
+						console.error('[FxSwUpdate] Failed to set device to programming mode:', err);
 						return Q.reject("Unable to set device to the programming mode : " + err);
 					})
 				)
 			})
 			.delay(500)  // PATCHED: Was 100ms, increased to 500ms for device stability
-			// PROGRAM DEVICE    
+			// PROGRAM DEVICE
 			.then(Q.fbind(notifyProgress, {phase : "Programming", status : "Programming device... ", progress : 10}))
-			.then(Q.fbind(transferData))
+			.then(function() {
+				console.log('[FxSwUpdate] Starting data transfer... Total packets:', m_TotalPacketCount);
+				return transferData();
+			})
+			.then(function() {
+				console.log('[FxSwUpdate] Data transfer completed successfully');
+			})
 			.delay(500)  // PATCHED: Was 100ms, increased to 500ms for device stability
 			// RESTORE DEVICE BACK TO THE NORMAL MODE
 			.then(Q.fbind(notifyProgress, {phase : "Finishing", status : "Restoring device back to the normal mode...", progress : 95}))		

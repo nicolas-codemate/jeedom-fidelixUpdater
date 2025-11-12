@@ -26,7 +26,7 @@ try {
     // Load helper class
     require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -34,14 +34,13 @@ try {
     if (init('action') == 'uploadFirmware') {
         log::add('fidelixUpdater', 'debug', 'Upload firmware demandé');
 
-        $uploaddir = __DIR__ . '/../../data/filetransfer';
-
-        if (!file_exists($uploaddir)) {
-            mkdir($uploaddir, 0775, true);
-        }
-
-        if (!file_exists($uploaddir)) {
-            throw new Exception(__('Répertoire de téléversement non trouvé : ', __FILE__) . $uploaddir);
+        // Use helper to ensure directory exists with proper error handling
+        try {
+            $uploaddir = fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('filetransfer'));
+            log::add('fidelixUpdater', 'debug', 'Upload directory resolved to: ' . $uploaddir);
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to create upload directory: ' . $e->getMessage());
+            throw new Exception(__('Impossible de créer le répertoire de téléversement : ', __FILE__) . $e->getMessage());
         }
 
         if (!isset($_FILES['file'])) {
@@ -76,14 +75,13 @@ try {
     if (init('action') == 'uploadSoftware') {
         log::add('fidelixUpdater', 'debug', 'Upload software demandé');
 
-        $uploaddir = __DIR__ . '/../../data/filetransfer';
-
-        if (!file_exists($uploaddir)) {
-            mkdir($uploaddir, 0775, true);
-        }
-
-        if (!file_exists($uploaddir)) {
-            throw new Exception(__('Répertoire de téléversement non trouvé : ', __FILE__) . $uploaddir);
+        // Use helper to ensure directory exists with proper error handling
+        try {
+            $uploaddir = fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('filetransfer'));
+            log::add('fidelixUpdater', 'debug', 'Upload directory resolved to: ' . $uploaddir);
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to create upload directory: ' . $e->getMessage());
+            throw new Exception(__('Impossible de créer le répertoire de téléversement : ', __FILE__) . $e->getMessage());
         }
 
         if (!isset($_FILES['file'])) {
@@ -152,14 +150,18 @@ try {
         }
 
         // Build full path to the firmware/software file
-        $filePath = __DIR__ . '/../../data/filetransfer/' . basename($filename);
+        $filePath = fidelixUpdater::getDataPath('filetransfer') . '/' . basename($filename);
         if (!file_exists($filePath)) {
-            throw new Exception('Fichier non trouvé : ' . $filename);
+            log::add('fidelixUpdater', 'error', 'Fichier non trouvé à l\'emplacement : ' . $filePath);
+            throw new Exception('Fichier non trouvé : ' . $filename . ' (recherché dans ' . $filePath . ')');
         }
 
+        // Ensure status directory exists
+        fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('status'));
+
         $updateId = uniqid('update_', true);
-        $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
-        $scriptPath = __DIR__ . '/../../data/update_' . $updateId . '.js';
+        $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
+        $scriptPath = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
 
         $logMsg = 'Démarrage mise à jour - UpdateID: ' . $updateId . ', Address: ' . $address;
         if ($subaddress !== null) {
@@ -179,14 +181,67 @@ try {
         file_put_contents($statusFile, json_encode($initialStatus, JSON_PRETTY_PRINT));
 
         // Generate Node.js script (CRITICAL: address as INTEGER, not string!)
+        // CRITICAL: Pass FULL absolute path to file, not just filename!
         $subaddressLine = $subaddress !== null ? "    subaddress: {$subaddress}," : "";
+
+        log::add('fidelixUpdater', 'debug', 'Generating Node.js script with file path: ' . $filePath);
 
         $jsCode = <<<JSCODE
 // Set process title for identification and security
 process.title = 'fidelixUpdater_{$updateId}';
 
+const fs = require('fs');
 const fxM24Update = require('../3rdparty/Fidelix/FxLib/FxM24Update.js');
 const multi24Update = new fxM24Update();
+
+// Handle uncaught exceptions to prevent silent crashes
+process.on('uncaughtException', (err) => {
+    // Log technical details for developers (goes to logsJeedom.txt and stderr)
+    console.error('UNCAUGHT EXCEPTION:', err.message);
+    console.error('Stack:', err.stack);
+
+    // Write simple user-friendly error to status file (no stack trace)
+    try {
+        const status = {
+            phase: 'Error',
+            status: 'Une erreur inattendue est survenue',
+            progress: 0,
+            timestamp: new Date().toISOString(),
+            error: 'La mise à jour a échoué. Vérifiez les logs ou contactez le support technique.'
+        };
+        fs.writeFileSync('{$statusFile}', JSON.stringify(status, null, 2));
+    } catch (writeErr) {
+        console.error('Failed to write error to status file:', writeErr);
+    }
+
+    process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    // Log technical details for developers (goes to logsJeedom.txt and stderr)
+    console.error('UNHANDLED REJECTION:', reason);
+    console.error('Promise:', promise);
+
+    // Write simple user-friendly error to status file
+    try {
+        const status = {
+            phase: 'Error',
+            status: 'Une erreur inattendue est survenue',
+            progress: 0,
+            timestamp: new Date().toISOString(),
+            error: 'La mise à jour a échoué. Vérifiez les logs ou contactez le support technique.'
+        };
+        fs.writeFileSync('{$statusFile}', JSON.stringify(status, null, 2));
+    } catch (writeErr) {
+        console.error('Failed to write error to status file:', writeErr);
+    }
+
+    process.exit(1);
+});
+
+// Log process start (technical details for logs only)
+console.log('[fidelixUpdater] Process started - PID:', process.pid, '| Update ID:', '{$updateId}');
 
 const options = {
     address: {$address},
@@ -197,7 +252,8 @@ const options = {
     statusFile: '{$statusFile}'
 };
 
-multi24Update.update('{$filename}', options)
+// IMPORTANT: Using FULL ABSOLUTE path to firmware/software file
+multi24Update.update('{$filePath}', options)
     .then(() => {
         console.log('Update succeeded');
         process.exit(0);
@@ -210,13 +266,24 @@ JSCODE;
 
         file_put_contents($scriptPath, $jsCode);
 
+        // Ensure logs directory exists
+        fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('logs'));
+
+        // Create stderr log file to capture Node.js errors
+        $stderrLog = fidelixUpdater::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
+        log::add('fidelixUpdater', 'debug', 'Node.js stderr will be captured in: ' . $stderrLog);
+
         // Launch Node.js in BACKGROUND and capture PID
-        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 & echo $!";
+        // IMPORTANT: Redirect stderr to log file instead of /dev/null to capture crashes
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2> " . escapeshellarg($stderrLog) . " & echo $!";
         $pid = (int)trim(exec($cmd));
 
         log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan - PID: ' . $pid);
 
-        // Register process in registry
+        // Node.js console log path (shared by all processes)
+        $nodejsLog = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/logsJeedom.txt';
+
+        // Register process in registry with log file paths
         fidelixUpdater::registerProcess(array(
             'updateId' => $updateId,
             'pid' => $pid,
@@ -224,7 +291,9 @@ JSCODE;
             'address' => $address,
             'subaddress' => $subaddress,
             'type' => $method,
-            'filename' => basename($filename)
+            'filename' => basename($filename),
+            'nodejsLog' => $nodejsLog,
+            'stderrLog' => $stderrLog
         ));
 
         // Return IMMEDIATELY with updateId and statusFile name
@@ -247,9 +316,10 @@ JSCODE;
 
         // Sanitize filename to prevent path traversal
         $statusFile = basename($statusFile);
-        $statusPath = __DIR__ . '/../../data/status/' . $statusFile;
+        $statusPath = fidelixUpdater::getDataPath('status') . '/' . $statusFile;
 
         if (!file_exists($statusPath)) {
+            log::add('fidelixUpdater', 'error', 'Fichier status non trouvé à l\'emplacement : ' . $statusPath);
             throw new Exception('Fichier status non trouvé : ' . $statusFile);
         }
 
@@ -275,7 +345,22 @@ JSCODE;
 
             // If PID is dead and progress < 100 and no error yet, mark as crashed
             if ($pidExists === false && $status['progress'] < 100 && empty($status['error'])) {
-                $status['error'] = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté et alimenté.';
+                // Try to read stderr log file to get more info about the crash (for debugging)
+                $stderrLog = fidelixUpdater::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
+                $stderrContent = '';
+
+                if (file_exists($stderrLog)) {
+                    $stderrContent = file_get_contents($stderrLog);
+                    if (!empty(trim($stderrContent))) {
+                        // Log stderr content for developers/debugging, but don't show to user
+                        log::add('fidelixUpdater', 'error', "Process {$updateId} stderr output: " . $stderrContent);
+                    }
+                }
+
+                // Simple user-friendly error message (no technical details)
+                $errorMsg = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté, alimenté et que le port série est correct.';
+
+                $status['error'] = $errorMsg;
                 $status['phase'] = 'Error';
 
                 // Update status file
@@ -308,8 +393,9 @@ JSCODE;
         // Sanitize updateId
         $updateId = preg_replace('/[^a-zA-Z0-9._-]/', '', $updateId);
 
-        $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
-        $scriptFile = __DIR__ . '/../../data/update_' . $updateId . '.js';
+        $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
+        $scriptFile = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
+        // Note: We keep stderr logs for historical processes (they will be cleaned by cron after 7 days)
 
         $deleted = array();
 
@@ -323,7 +409,7 @@ JSCODE;
             $deleted[] = 'update_' . $updateId . '.js';
         }
 
-        log::add('fidelixUpdater', 'debug', 'Cleanup effectué pour updateId: ' . $updateId . ' - Fichiers supprimés: ' . implode(', ', $deleted));
+        log::add('fidelixUpdater', 'debug', 'Cleanup effectué pour updateId: ' . $updateId . ' - Fichiers supprimés: ' . implode(', ', $deleted) . ' (logs conservés pour historique)');
 
         ajax::success(array('deleted' => $deleted));
     }
@@ -454,8 +540,8 @@ JSCODE;
 
         // Generate unique test ID
         $testId = uniqid('test_', true);
-        $resultFile = __DIR__ . '/../../data/test_result_' . $testId . '.json';
-        $scriptPath = __DIR__ . '/../../3rdparty/Fidelix/FxLib/testConnection.js';
+        $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
+        $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
 
         // Run test script (synchronous - wait for result)
         $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
@@ -500,9 +586,10 @@ JSCODE;
     if (init('action') == 'fixPermissions') {
         log::add('fidelixUpdater', 'info', 'Reconfiguration des permissions demandée');
 
-        $fixScript = __DIR__ . '/../../resources/fix-permissions.sh';
+        $fixScript = fidelixUpdater::getPluginPath() . '/resources/fix-permissions.sh';
 
         if (!file_exists($fixScript)) {
+            log::add('fidelixUpdater', 'error', 'Script de correction non trouvé à l\'emplacement : ' . $fixScript);
             throw new Exception('Script de correction non trouvé : ' . $fixScript);
         }
 
@@ -528,6 +615,73 @@ JSCODE;
         }
 
         ajax::success($result);
+    }
+
+    // ========================================
+    // ACTION: getLogs
+    // ========================================
+    if (init('action') == 'getLogs') {
+        $updateId = init('updateId');
+
+        if (empty($updateId)) {
+            throw new Exception('updateId non spécifié');
+        }
+
+        // Sanitize updateId
+        $updateId = preg_replace('/[^a-zA-Z0-9._-]/', '', $updateId);
+
+        // Get process from registry to find log file paths
+        $registry = fidelixUpdater::loadProcessesRegistry();
+        $process = null;
+
+        foreach ($registry['processes'] as $p) {
+            if ($p['updateId'] === $updateId) {
+                $process = $p;
+                break;
+            }
+        }
+
+        if (!$process) {
+            throw new Exception('Processus non trouvé : ' . $updateId);
+        }
+
+        $logs = array(
+            'nodejs' => '',
+            'stderr' => '',
+            'jeedom' => ''
+        );
+
+        // Read Node.js console log (logsJeedom.txt - shared file, may contain other processes)
+        if (isset($process['logFiles']['nodejs']) && file_exists($process['logFiles']['nodejs'])) {
+            $nodejsContent = file_get_contents($process['logFiles']['nodejs']);
+            // Try to extract only logs for this process (lines between process start and end)
+            $logs['nodejs'] = $nodejsContent; // For now, show full file (TODO: filter by updateId)
+        }
+
+        // Read stderr log (specific to this process)
+        if (isset($process['logFiles']['stderr']) && file_exists($process['logFiles']['stderr'])) {
+            $logs['stderr'] = file_get_contents($process['logFiles']['stderr']);
+        }
+
+        // Get Jeedom logs for this process (filter by updateId)
+        $jeedomLogFile = '/var/log/jeedom/fidelixUpdater';
+        if (file_exists($jeedomLogFile)) {
+            $jeedomContent = file_get_contents($jeedomLogFile);
+            $lines = explode("\n", $jeedomContent);
+            $filteredLines = array();
+            foreach ($lines as $line) {
+                // Keep lines that mention this updateId
+                if (strpos($line, $updateId) !== false) {
+                    $filteredLines[] = $line;
+                }
+            }
+            $logs['jeedom'] = implode("\n", $filteredLines);
+        }
+
+        ajax::success(array(
+            'process' => $process,
+            'logs' => $logs
+        ));
     }
 
     throw new Exception(__('Aucune méthode correspondante à', __FILE__) . ' : ' . init('action'));
