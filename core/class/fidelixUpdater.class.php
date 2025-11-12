@@ -188,7 +188,7 @@ class fidelixUpdater extends eqLogic {
      *
      * @return array Array of processes
      */
-    private static function loadProcessesRegistry() {
+    public static function loadProcessesRegistry() {
         $filePath = self::getProcessesFilePath();
 
         if (!file_exists($filePath)) {
@@ -235,7 +235,12 @@ class fidelixUpdater extends eqLogic {
             'startTime' => date('c'),
             'lastUpdate' => date('c'),
             'endTime' => null,
-            'error' => null
+            'error' => null,
+            // Log file paths for debugging
+            'logFiles' => array(
+                'nodejs' => isset($processData['nodejsLog']) ? $processData['nodejsLog'] : null,
+                'stderr' => isset($processData['stderrLog']) ? $processData['stderrLog'] : null
+            )
         );
 
         $registry['processes'][] = $process;
@@ -538,14 +543,39 @@ class fidelixUpdater extends eqLogic {
             }
         }
 
-        // Cleanup stderr log files
+        // Cleanup stderr log files (keep for 7 days for historical processes)
         $logsDir = self::getDataPath('logs');
+        $oneWeekAgo = time() - (7 * 24 * 60 * 60); // 7 days
         if (is_dir($logsDir)) {
             $logFiles = scandir($logsDir);
             foreach ($logFiles as $file) {
                 if (strpos($file, 'nodejs_update_') === 0 && strpos($file, '.log') !== false) {
                     $updateId = str_replace(array('nodejs_', '.log'), '', $file);
-                    if (!in_array($updateId, $activeUpdateIds)) {
+
+                    // Keep logs for active processes
+                    if (in_array($updateId, $activeUpdateIds)) {
+                        continue;
+                    }
+
+                    // For completed/failed processes, check if older than 7 days
+                    $process = null;
+                    foreach ($registry['processes'] as $p) {
+                        if ($p['updateId'] === $updateId) {
+                            $process = $p;
+                            break;
+                        }
+                    }
+
+                    // If process found and has endTime, check age
+                    if ($process && isset($process['endTime'])) {
+                        $endTime = strtotime($process['endTime']);
+                        if ($endTime < $oneWeekAgo) {
+                            // Process ended more than 7 days ago, remove log
+                            @unlink($logsDir . '/' . $file);
+                            $removed['stderrlogs']++;
+                        }
+                    } else {
+                        // Process not in registry or no endTime, remove orphaned log
                         @unlink($logsDir . '/' . $file);
                         $removed['stderrlogs']++;
                     }
@@ -705,17 +735,17 @@ class fidelixUpdater extends eqLogic {
 
     /**
      * Cleanup temporary files for a process
+     * Note: stderr logs are kept for historical processes and cleaned by cron after 7 days
      *
      * @param string $updateId Process update ID
      */
     private static function cleanupProcessFiles($updateId) {
         $statusFile = self::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptFile = self::getDataPath() . '/update_' . $updateId . '.js';
-        $stderrLog = self::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
+        // Note: We keep stderr logs for historical processes (they will be cleaned by cron after 7 days)
 
         @unlink($statusFile);
         @unlink($scriptFile);
-        @unlink($stderrLog);
     }
 
     /*     * *********************Méthodes d'instance************************* */

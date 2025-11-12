@@ -474,7 +474,6 @@ function fxFwUpdate() {
         .then(function() {
             console.log('[FxFwUpdate] Connection opened successfully');
         })
-        .delay(1000)  // PATCHED: Add 1 second delay after port opening to let it stabilize (fixes "Port is not open" error on some systems)
         // SET DEVICE TO THE BOOT MODE			
         .then(Q.fbind(notifyProgress, {status : "Activating boot mode...", progress : 5}))		
         .then(function() {
