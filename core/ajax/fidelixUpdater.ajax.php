@@ -34,14 +34,13 @@ try {
     if (init('action') == 'uploadFirmware') {
         log::add('fidelixUpdater', 'debug', 'Upload firmware demandé');
 
-        $uploaddir = __DIR__ . '/../../data/filetransfer';
-
-        if (!file_exists($uploaddir)) {
-            mkdir($uploaddir, 0775, true);
-        }
-
-        if (!file_exists($uploaddir)) {
-            throw new Exception(__('Répertoire de téléversement non trouvé : ', __FILE__) . $uploaddir);
+        // Use helper to ensure directory exists with proper error handling
+        try {
+            $uploaddir = fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('filetransfer'));
+            log::add('fidelixUpdater', 'debug', 'Upload directory resolved to: ' . $uploaddir);
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to create upload directory: ' . $e->getMessage());
+            throw new Exception(__('Impossible de créer le répertoire de téléversement : ', __FILE__) . $e->getMessage());
         }
 
         if (!isset($_FILES['file'])) {
@@ -76,14 +75,13 @@ try {
     if (init('action') == 'uploadSoftware') {
         log::add('fidelixUpdater', 'debug', 'Upload software demandé');
 
-        $uploaddir = __DIR__ . '/../../data/filetransfer';
-
-        if (!file_exists($uploaddir)) {
-            mkdir($uploaddir, 0775, true);
-        }
-
-        if (!file_exists($uploaddir)) {
-            throw new Exception(__('Répertoire de téléversement non trouvé : ', __FILE__) . $uploaddir);
+        // Use helper to ensure directory exists with proper error handling
+        try {
+            $uploaddir = fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('filetransfer'));
+            log::add('fidelixUpdater', 'debug', 'Upload directory resolved to: ' . $uploaddir);
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to create upload directory: ' . $e->getMessage());
+            throw new Exception(__('Impossible de créer le répertoire de téléversement : ', __FILE__) . $e->getMessage());
         }
 
         if (!isset($_FILES['file'])) {
@@ -152,14 +150,18 @@ try {
         }
 
         // Build full path to the firmware/software file
-        $filePath = __DIR__ . '/../../data/filetransfer/' . basename($filename);
+        $filePath = fidelixUpdater::getDataPath('filetransfer') . '/' . basename($filename);
         if (!file_exists($filePath)) {
-            throw new Exception('Fichier non trouvé : ' . $filename);
+            log::add('fidelixUpdater', 'error', 'Fichier non trouvé à l\'emplacement : ' . $filePath);
+            throw new Exception('Fichier non trouvé : ' . $filename . ' (recherché dans ' . $filePath . ')');
         }
 
+        // Ensure status directory exists
+        fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('status'));
+
         $updateId = uniqid('update_', true);
-        $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
-        $scriptPath = __DIR__ . '/../../data/update_' . $updateId . '.js';
+        $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
+        $scriptPath = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
 
         $logMsg = 'Démarrage mise à jour - UpdateID: ' . $updateId . ', Address: ' . $address;
         if ($subaddress !== null) {
@@ -179,7 +181,10 @@ try {
         file_put_contents($statusFile, json_encode($initialStatus, JSON_PRETTY_PRINT));
 
         // Generate Node.js script (CRITICAL: address as INTEGER, not string!)
+        // CRITICAL: Pass FULL absolute path to file, not just filename!
         $subaddressLine = $subaddress !== null ? "    subaddress: {$subaddress}," : "";
+
+        log::add('fidelixUpdater', 'debug', 'Generating Node.js script with file path: ' . $filePath);
 
         $jsCode = <<<JSCODE
 // Set process title for identification and security
@@ -197,7 +202,8 @@ const options = {
     statusFile: '{$statusFile}'
 };
 
-multi24Update.update('{$filename}', options)
+// IMPORTANT: Using FULL ABSOLUTE path to firmware/software file
+multi24Update.update('{$filePath}', options)
     .then(() => {
         console.log('Update succeeded');
         process.exit(0);
@@ -247,9 +253,10 @@ JSCODE;
 
         // Sanitize filename to prevent path traversal
         $statusFile = basename($statusFile);
-        $statusPath = __DIR__ . '/../../data/status/' . $statusFile;
+        $statusPath = fidelixUpdater::getDataPath('status') . '/' . $statusFile;
 
         if (!file_exists($statusPath)) {
+            log::add('fidelixUpdater', 'error', 'Fichier status non trouvé à l\'emplacement : ' . $statusPath);
             throw new Exception('Fichier status non trouvé : ' . $statusFile);
         }
 
@@ -308,8 +315,8 @@ JSCODE;
         // Sanitize updateId
         $updateId = preg_replace('/[^a-zA-Z0-9._-]/', '', $updateId);
 
-        $statusFile = __DIR__ . '/../../data/status/status_' . $updateId . '.json';
-        $scriptFile = __DIR__ . '/../../data/update_' . $updateId . '.js';
+        $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
+        $scriptFile = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
 
         $deleted = array();
 
@@ -454,8 +461,8 @@ JSCODE;
 
         // Generate unique test ID
         $testId = uniqid('test_', true);
-        $resultFile = __DIR__ . '/../../data/test_result_' . $testId . '.json';
-        $scriptPath = __DIR__ . '/../../3rdparty/Fidelix/FxLib/testConnection.js';
+        $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
+        $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
 
         // Run test script (synchronous - wait for result)
         $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
@@ -500,9 +507,10 @@ JSCODE;
     if (init('action') == 'fixPermissions') {
         log::add('fidelixUpdater', 'info', 'Reconfiguration des permissions demandée');
 
-        $fixScript = __DIR__ . '/../../resources/fix-permissions.sh';
+        $fixScript = fidelixUpdater::getPluginPath() . '/resources/fix-permissions.sh';
 
         if (!file_exists($fixScript)) {
+            log::add('fidelixUpdater', 'error', 'Script de correction non trouvé à l\'emplacement : ' . $fixScript);
             throw new Exception('Script de correction non trouvé : ' . $fixScript);
         }
 

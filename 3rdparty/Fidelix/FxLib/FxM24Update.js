@@ -239,19 +239,45 @@ function fxM24Update() {
 
         try {
           console.log('Debut de la lecture du fichier de mise à jour')
-          fileToHandle = FILETRANSFERDIR + path.sep + filename;	
-          // Read file          
+
+          // PATCHED: Support both absolute paths (new) and relative filenames (backward compatibility)
+          if (path.isAbsolute(filename)) {
+            // Filename is already an absolute path, use it directly
+            fileToHandle = filename;
+            console.log('Using absolute path: ' + fileToHandle);
+          } else {
+            // Filename is relative, construct full path (backward compatibility)
+            fileToHandle = FILETRANSFERDIR + path.sep + filename;
+            console.log('Constructed path from filename: ' + fileToHandle);
+          }
+
+          // Verify file exists before attempting to read
+          if (!fs.existsSync(fileToHandle)) {
+            throw new Error("File not found: " + fileToHandle);
+          }
+
+          console.log('Reading file: ' + fileToHandle);
+          // Read file
           data = fs.readFileSync(fileToHandle);
+
+          console.log('File read successfully, size: ' + data.length + ' bytes');
+
           // Remove file
-          fs.unlinkSync(fileToHandle);          
+          fs.unlinkSync(fileToHandle);
+          console.log('Temporary file deleted: ' + fileToHandle);
         }
         catch(err) {
-          fxLog.error("Error in reading file " + fileToHandle);
-          console.log('Erreur sur la lecture du fichier')
-          if (fileToHandle != null) {
-            fs.unlinkSync(fileToHandle);
+          fxLog.error("Error in reading file " + fileToHandle + ": " + err.message);
+          console.log('Erreur sur la lecture du fichier: ' + err.message)
+          if (fileToHandle != null && fs.existsSync(fileToHandle)) {
+            try {
+              fs.unlinkSync(fileToHandle);
+              console.log('Cleaned up file after error: ' + fileToHandle);
+            } catch (unlinkErr) {
+              console.log('Failed to clean up file: ' + unlinkErr.message);
+            }
           }
-          throw("Can't read file");
+          throw("Can't read file: " + err.message);
         }
 
         options.data = Buffer.from(data);  // PATCHED: new Buffer() deprecated, use Buffer.from()

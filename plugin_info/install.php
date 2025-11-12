@@ -24,19 +24,53 @@ function fidelixUpdater_install() {
 
     log::add('fidelixUpdater', 'info', 'Starting plugin installation/configuration...');
 
-    // Créer les répertoires nécessaires (au cas où le script échoue)
-    $dataDir = $pluginDir . '/data';
-    if (!file_exists($dataDir . '/filetransfer')) {
-        mkdir($dataDir . '/filetransfer', 0775, true);
-    }
-    if (!file_exists($dataDir . '/status')) {
-        mkdir($dataDir . '/status', 0775, true);
-    }
-    if (!file_exists($dataDir . '/logs')) {
-        mkdir($dataDir . '/logs', 0775, true);
+    // Créer les répertoires nécessaires avec gestion d'erreurs robuste
+    $dataDir = realpath($pluginDir) . '/data';
+    log::add('fidelixUpdater', 'debug', 'Plugin directory resolved to: ' . realpath($pluginDir));
+    log::add('fidelixUpdater', 'debug', 'Data directory target: ' . $dataDir);
+
+    // Créer le répertoire parent data/ d'abord
+    if (!file_exists($dataDir)) {
+        log::add('fidelixUpdater', 'info', 'Creating data directory: ' . $dataDir);
+        if (!mkdir($dataDir, 0775, true)) {
+            log::add('fidelixUpdater', 'error', 'FAILED to create data directory: ' . $dataDir);
+            throw new Exception('Cannot create data directory');
+        }
+        chmod($dataDir, 0775);
+        log::add('fidelixUpdater', 'info', 'Data directory created successfully');
+    } else {
+        log::add('fidelixUpdater', 'debug', 'Data directory already exists');
     }
 
-    log::add('fidelixUpdater', 'debug', 'Directories created');
+    // Créer les sous-répertoires
+    $subdirs = array('filetransfer', 'status', 'logs');
+    foreach ($subdirs as $subdir) {
+        $path = $dataDir . '/' . $subdir;
+        if (!file_exists($path)) {
+            log::add('fidelixUpdater', 'info', 'Creating subdirectory: ' . $path);
+            if (!mkdir($path, 0775, true)) {
+                log::add('fidelixUpdater', 'error', 'FAILED to create subdirectory: ' . $path);
+                throw new Exception('Cannot create subdirectory: ' . $subdir);
+            }
+            chmod($path, 0775);
+            log::add('fidelixUpdater', 'info', 'Subdirectory created: ' . $subdir);
+        } else {
+            log::add('fidelixUpdater', 'debug', 'Subdirectory already exists: ' . $subdir);
+        }
+
+        // Vérifier que le répertoire est accessible en écriture
+        if (!is_writable($path)) {
+            log::add('fidelixUpdater', 'warning', 'Directory is not writable: ' . $path);
+            log::add('fidelixUpdater', 'warning', 'Attempting to fix permissions...');
+            chmod($path, 0775);
+            if (!is_writable($path)) {
+                log::add('fidelixUpdater', 'error', 'FAILED to make directory writable: ' . $path);
+                throw new Exception('Directory is not writable: ' . $subdir);
+            }
+        }
+    }
+
+    log::add('fidelixUpdater', 'info', 'All directories created and verified successfully');
 
     // Initialize processes registry
     require_once $pluginDir . '/core/class/fidelixUpdater.class.php';
