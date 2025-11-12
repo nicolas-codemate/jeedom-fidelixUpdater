@@ -494,7 +494,7 @@ class fidelixUpdater extends eqLogic {
      */
     public static function cleanupTempFiles() {
         $registry = self::loadProcessesRegistry();
-        $removed = array('status' => 0, 'scripts' => 0, 'uploads' => 0);
+        $removed = array('status' => 0, 'scripts' => 0, 'uploads' => 0, 'stderrlogs' => 0);
 
         // Get all active/running updateIds and their filenames
         $activeUpdateIds = array();
@@ -533,6 +533,21 @@ class fidelixUpdater extends eqLogic {
                     if (!in_array($updateId, $activeUpdateIds)) {
                         @unlink($dataDir . '/' . $file);
                         $removed['scripts']++;
+                    }
+                }
+            }
+        }
+
+        // Cleanup stderr log files
+        $logsDir = self::getDataPath('logs');
+        if (is_dir($logsDir)) {
+            $logFiles = scandir($logsDir);
+            foreach ($logFiles as $file) {
+                if (strpos($file, 'nodejs_update_') === 0 && strpos($file, '.log') !== false) {
+                    $updateId = str_replace(array('nodejs_', '.log'), '', $file);
+                    if (!in_array($updateId, $activeUpdateIds)) {
+                        @unlink($logsDir . '/' . $file);
+                        $removed['stderrlogs']++;
                     }
                 }
             }
@@ -578,7 +593,7 @@ class fidelixUpdater extends eqLogic {
         // Cleanup temporary files
         $removedFiles = self::cleanupTempFiles();
 
-        log::add('fidelixUpdater', 'info', "Cron cleanup completed: synced={$synced}, removed_processes={$removedProcesses}, removed_status_files={$removedFiles['status']}, removed_script_files={$removedFiles['scripts']}, removed_upload_files={$removedFiles['uploads']}");
+        log::add('fidelixUpdater', 'info', "Cron cleanup completed: synced={$synced}, removed_processes={$removedProcesses}, removed_status_files={$removedFiles['status']}, removed_script_files={$removedFiles['scripts']}, removed_stderr_logs={$removedFiles['stderrlogs']}, removed_upload_files={$removedFiles['uploads']}");
     }
 
     /**
@@ -696,9 +711,11 @@ class fidelixUpdater extends eqLogic {
     private static function cleanupProcessFiles($updateId) {
         $statusFile = self::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptFile = self::getDataPath() . '/update_' . $updateId . '.js';
+        $stderrLog = self::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
 
         @unlink($statusFile);
         @unlink($scriptFile);
+        @unlink($stderrLog);
     }
 
     /*     * *********************Méthodes d'instance************************* */

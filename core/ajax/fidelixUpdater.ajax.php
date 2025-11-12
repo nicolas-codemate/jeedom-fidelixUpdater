@@ -190,8 +190,58 @@ try {
 // Set process title for identification and security
 process.title = 'fidelixUpdater_{$updateId}';
 
+const fs = require('fs');
 const fxM24Update = require('../3rdparty/Fidelix/FxLib/FxM24Update.js');
 const multi24Update = new fxM24Update();
+
+// Handle uncaught exceptions to prevent silent crashes
+process.on('uncaughtException', (err) => {
+    console.error('UNCAUGHT EXCEPTION:', err.message);
+    console.error('Stack:', err.stack);
+
+    // Write error to status file
+    try {
+        const status = {
+            phase: 'Error',
+            status: 'Uncaught exception: ' + err.message,
+            progress: 0,
+            timestamp: new Date().toISOString(),
+            error: 'EXCEPTION: ' + err.message + '\\n\\nStack trace:\\n' + err.stack
+        };
+        fs.writeFileSync('{$statusFile}', JSON.stringify(status, null, 2));
+    } catch (writeErr) {
+        console.error('Failed to write error to status file:', writeErr);
+    }
+
+    process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('UNHANDLED REJECTION:', reason);
+    console.error('Promise:', promise);
+
+    // Write error to status file
+    try {
+        const status = {
+            phase: 'Error',
+            status: 'Unhandled promise rejection',
+            progress: 0,
+            timestamp: new Date().toISOString(),
+            error: 'PROMISE REJECTION: ' + (reason ? reason.toString() : 'Unknown reason')
+        };
+        fs.writeFileSync('{$statusFile}', JSON.stringify(status, null, 2));
+    } catch (writeErr) {
+        console.error('Failed to write error to status file:', writeErr);
+    }
+
+    process.exit(1);
+});
+
+// Log process start
+console.log('Process started with PID:', process.pid);
+console.log('Status file:', '{$statusFile}');
+console.log('Update ID:', '{$updateId}');
 
 const options = {
     address: {$address},
@@ -216,8 +266,16 @@ JSCODE;
 
         file_put_contents($scriptPath, $jsCode);
 
+        // Ensure logs directory exists
+        fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('logs'));
+
+        // Create stderr log file to capture Node.js errors
+        $stderrLog = fidelixUpdater::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
+        log::add('fidelixUpdater', 'debug', 'Node.js stderr will be captured in: ' . $stderrLog);
+
         // Launch Node.js in BACKGROUND and capture PID
-        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2>&1 & echo $!";
+        // IMPORTANT: Redirect stderr to log file instead of /dev/null to capture crashes
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2> " . escapeshellarg($stderrLog) . " & echo $!";
         $pid = (int)trim(exec($cmd));
 
         log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan - PID: ' . $pid);
@@ -282,7 +340,24 @@ JSCODE;
 
             // If PID is dead and progress < 100 and no error yet, mark as crashed
             if ($pidExists === false && $status['progress'] < 100 && empty($status['error'])) {
-                $status['error'] = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté et alimenté.';
+                // Try to read stderr log file to get more info about the crash
+                $stderrLog = fidelixUpdater::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
+                $stderrContent = '';
+
+                if (file_exists($stderrLog)) {
+                    $stderrContent = file_get_contents($stderrLog);
+                    if (!empty(trim($stderrContent))) {
+                        log::add('fidelixUpdater', 'error', "Process {$updateId} stderr output: " . $stderrContent);
+                    }
+                }
+
+                // Build error message with stderr content if available
+                $errorMsg = 'Le processus de mise à jour s\'est arrêté de manière inattendue. Vérifiez que le module est bien connecté et alimenté.';
+                if (!empty(trim($stderrContent))) {
+                    $errorMsg .= "\n\nDétails techniques:\n" . trim($stderrContent);
+                }
+
+                $status['error'] = $errorMsg;
                 $status['phase'] = 'Error';
 
                 // Update status file
@@ -317,6 +392,7 @@ JSCODE;
 
         $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptFile = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
+        $stderrLog = fidelixUpdater::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
 
         $deleted = array();
 
@@ -328,6 +404,11 @@ JSCODE;
         if (file_exists($scriptFile)) {
             @unlink($scriptFile);
             $deleted[] = 'update_' . $updateId . '.js';
+        }
+
+        if (file_exists($stderrLog)) {
+            @unlink($stderrLog);
+            $deleted[] = 'nodejs_' . $updateId . '.log';
         }
 
         log::add('fidelixUpdater', 'debug', 'Cleanup effectué pour updateId: ' . $updateId . ' - Fichiers supprimés: ' . implode(', ', $deleted));

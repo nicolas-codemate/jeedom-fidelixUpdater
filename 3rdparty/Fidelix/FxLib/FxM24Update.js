@@ -262,9 +262,9 @@ function fxM24Update() {
 
           console.log('File read successfully, size: ' + data.length + ' bytes');
 
-          // Remove file
-          fs.unlinkSync(fileToHandle);
-          console.log('Temporary file deleted: ' + fileToHandle);
+          // PATCHED: Keep file until programming succeeds (moved deletion to end)
+          // Will be deleted in .then() after successful programming or in .catch() on error
+          console.log('Keeping file for programming: ' + fileToHandle);
         }
         catch(err) {
           fxLog.error("Error in reading file " + fileToHandle + ": " + err.message);
@@ -272,7 +272,7 @@ function fxM24Update() {
           if (fileToHandle != null && fs.existsSync(fileToHandle)) {
             try {
               fs.unlinkSync(fileToHandle);
-              console.log('Cleaned up file after error: ' + fileToHandle);
+              console.log('Cleaned up file after read error: ' + fileToHandle);
             } catch (unlinkErr) {
               console.log('Failed to clean up file: ' + unlinkErr.message);
             }
@@ -281,13 +281,24 @@ function fxM24Update() {
         }
 
         options.data = Buffer.from(data);  // PATCHED: new Buffer() deprecated, use Buffer.from()
+        options.fileToHandle = fileToHandle; // PATCHED: Store file path for later cleanup
         fxLog.debug('File read length', options.data.length);
         fxLog.debug('Start programming');
-        console.log('Start programming')
+        console.log('Start programming, data buffer size: ' + options.data.length + ' bytes')
         return Q.resolve();
     })
     .then(Q.fbind(device.program, options)) // DO PROGRAM
     .then(function() {                      // SUCCEEDED
+      console.log('Programming completed successfully');
+      // PATCHED: Delete file after successful programming
+      if (options.fileToHandle && fs.existsSync(options.fileToHandle)) {
+        try {
+          fs.unlinkSync(options.fileToHandle);
+          console.log('Temporary file deleted after successful programming: ' + options.fileToHandle);
+        } catch (unlinkErr) {
+          console.log('Warning: Failed to delete temporary file: ' + unlinkErr.message);
+        }
+      }
       console.log('Mise à jour effectuée avec succès')
       fxLog.debug("Update succeeded...");
       deferred.resolve();
@@ -296,6 +307,16 @@ function fxM24Update() {
         // PATCHED: Added recovery mechanism to prevent device bricking
         fxLog.error("Update failed, attempting recovery... " + err);
         console.log("Update failed, attempting recovery: " + err);
+
+        // PATCHED: Cleanup uploaded file on error
+        if (options.fileToHandle && fs.existsSync(options.fileToHandle)) {
+            try {
+                fs.unlinkSync(options.fileToHandle);
+                console.log('Temporary file deleted after programming error: ' + options.fileToHandle);
+            } catch (unlinkErr) {
+                console.log('Warning: Failed to delete temporary file after error: ' + unlinkErr.message);
+            }
+        }
 
         // PATCHED: Write error to status file immediately
         if (self.statusFile) {
