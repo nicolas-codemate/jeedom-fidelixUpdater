@@ -239,6 +239,7 @@ function fxSwUpdate() {
 			.then(function() {
 				console.log('[FxSwUpdate] Connection opened successfully');
 			})
+			.delay(1000)  // PATCHED: Add 1 second delay after port opening to let it stabilize (fixes "Port is not open" error on some systems)
 			// SET DEVICE TO THE PASS-THROUGH MODE
 			.then(function() {
 
