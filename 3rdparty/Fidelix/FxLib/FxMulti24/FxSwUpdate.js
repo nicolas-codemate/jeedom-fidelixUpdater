@@ -15,6 +15,7 @@ const Q = require('q');
 // *******************************************************************
 //const WAIT_PATTERN_TIMEOUT = 2000;
 const NUM_OF_RETRIES = 10;  // PATCHED: Was 3, increased to 10 (ref: C# implementation)
+const PORT_STABILIZATION_DELAY = 500;  // PATCHED: Delay after serial port opening to ensure port is ready (ms)
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -238,6 +239,10 @@ function fxSwUpdate() {
 			})
 			.then(function() {
 				console.log('[FxSwUpdate] Connection opened successfully');
+			})
+			.delay(PORT_STABILIZATION_DELAY)
+			.then(function() {
+				console.log('[FxSwUpdate] Port stabilized after ' + PORT_STABILIZATION_DELAY + 'ms delay');
 			})
 			// SET DEVICE TO THE PASS-THROUGH MODE
 			.then(function() {

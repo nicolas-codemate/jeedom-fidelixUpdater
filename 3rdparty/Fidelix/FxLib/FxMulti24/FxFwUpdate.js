@@ -28,6 +28,7 @@ console.log = function(message) {
 // *******************************************************************
 //const WAIT_PATTERN_TIMEOUT = 2000;
 const NUM_OF_RETRIES = 10;  // PATCHED: Was 3, increased to 10 (ref: C# implementation)
+const PORT_STABILIZATION_DELAY = 500;  // PATCHED: Delay after serial port opening to ensure port is ready (ms)
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -474,8 +475,12 @@ function fxFwUpdate() {
         .then(function() {
             console.log('[FxFwUpdate] Connection opened successfully');
         })
-        // SET DEVICE TO THE BOOT MODE			
-        .then(Q.fbind(notifyProgress, {status : "Activating boot mode...", progress : 5}))		
+        .delay(PORT_STABILIZATION_DELAY)
+        .then(function() {
+            console.log('[FxFwUpdate] Port stabilized after ' + PORT_STABILIZATION_DELAY + 'ms delay');
+        })
+        // SET DEVICE TO THE BOOT MODE
+        .then(Q.fbind(notifyProgress, {status : "Activating boot mode...", progress : 5}))
         .then(function() {
             console.log('Activating boot Mode......') 
             return (
