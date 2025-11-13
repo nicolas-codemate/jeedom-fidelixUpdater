@@ -34,7 +34,7 @@ if (!isConnect('admin')) {
                 <label>{{Type de mise à jour}}</label>
                 <select class="form-control" id="updateType">
                     <option value="m24firmware">{{Firmware}} (.hex)</option>
-                    <option value="m24software">{{Software}} (.M24IEC)</option>
+                    <option value="m24software" selected>{{Software}} (.M24IEC)</option>
                 </select>
             </div>
 
@@ -70,7 +70,7 @@ if (!isConnect('admin')) {
                     $usbMapping = jeedom::getUsbMapping('', true);
                     if (is_array($usbMapping)) {
                         foreach ($usbMapping as $key => $value) {
-                            echo '<option value="' . $key . '">' . $key . ' (' . $value . ')</option>';
+                            echo '<option value="' . $value . '">' . $key . ' (' . $value . ')</option>';
                         }
                     }
                     ?>
@@ -81,8 +81,8 @@ if (!isConnect('admin')) {
                 <label>{{Vitesse de communication (Baud Rate)}}</label>
                 <select class="form-control" id="baudRate">
                     <option value="9600">9600</option>
-                    <option value="19200" selected>19200</option>
-                    <option value="38400">38400</option>
+                    <option value="19200">19200</option>
+                    <option value="38400" selected>38400</option>
                     <option value="57600">57600</option>
                     <option value="115200">115200</option>
                 </select>

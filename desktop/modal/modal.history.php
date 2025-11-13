@@ -118,12 +118,21 @@ $history = fidelixUpdater::getProcessHistory(50);
 
     <div class="tab-content" style="margin-top: 10px;">
         <div role="tabpanel" class="tab-pane active" id="logsTab_stderr">
+            <button class="btn btn-sm btn-default btn-copy-logs" data-target="logContent_stderr" style="margin-bottom: 5px;">
+                <i class="fas fa-copy"></i> {{Copier}}
+            </button>
             <pre id="logContent_stderr" style="max-height:400px; overflow:auto; font-size:11px; background:#f5f5f5; padding:10px; border:1px solid #ddd;"></pre>
         </div>
         <div role="tabpanel" class="tab-pane" id="logsTab_nodejs">
+            <button class="btn btn-sm btn-default btn-copy-logs" data-target="logContent_nodejs" style="margin-bottom: 5px;">
+                <i class="fas fa-copy"></i> {{Copier}}
+            </button>
             <pre id="logContent_nodejs" style="max-height:400px; overflow:auto; font-size:11px; background:#f5f5f5; padding:10px; border:1px solid #ddd;"></pre>
         </div>
         <div role="tabpanel" class="tab-pane" id="logsTab_jeedom">
+            <button class="btn btn-sm btn-default btn-copy-logs" data-target="logContent_jeedom" style="margin-bottom: 5px;">
+                <i class="fas fa-copy"></i> {{Copier}}
+            </button>
             <pre id="logContent_jeedom" style="max-height:400px; overflow:auto; font-size:11px; background:#f5f5f5; padding:10px; border:1px solid #ddd;"></pre>
         </div>
     </div>
@@ -173,6 +182,35 @@ $(document).ready(function() {
                 $.fn.showAlert({message: '{{Erreur lors du chargement des logs:}} ' + error, level: 'danger'});
             }
         });
+    });
+
+    // Handle "Copy Logs" button click
+    $(document).on('click', '.btn-copy-logs', function() {
+        var targetId = $(this).data('target');
+        var logContent = $('#' + targetId).text();
+
+        // Create temporary textarea
+        var $temp = $('<textarea>');
+        $('body').append($temp);
+        $temp.val(logContent).select();
+
+        try {
+            // Copy to clipboard
+            document.execCommand('copy');
+
+            // Show success feedback
+            var $btn = $(this);
+            var originalHtml = $btn.html();
+            $btn.html('<i class="fas fa-check"></i> {{Copié !}}').addClass('btn-success').removeClass('btn-default');
+
+            setTimeout(function() {
+                $btn.html(originalHtml).removeClass('btn-success').addClass('btn-default');
+            }, 2000);
+        } catch (err) {
+            $.fn.showAlert({message: '{{Erreur lors de la copie}}', level: 'danger'});
+        }
+
+        $temp.remove();
     });
 });
 </script>
