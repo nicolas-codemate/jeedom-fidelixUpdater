@@ -173,9 +173,13 @@ function fxSerialPort() {
 
 				// Open port
 				m_SerialPort.open(function (err) {
-					
-					// Flush serialport
-          m_SerialPort.flush();
+
+					// Flush serialport (non-blocking if it fails)
+					m_SerialPort.flush(function(flushErr) {
+						if (flushErr) {
+							console.log('Flush warning (non-blocking):', flushErr.message);
+						}
+					});
 
 					// Wait callback
 					if (err){

@@ -122,7 +122,7 @@ function fxSerial() {
 	
     this.flush = function(...args) {
 
-		return (m_SerialPort) ? m_SerialPort.flush.call(...args) : Q.reject('Port is not open');
+		return (m_SerialPort) ? m_SerialPort.flush(...args) : Q.reject('Port is not open');
 	}
 
 	// Open serial port connection
