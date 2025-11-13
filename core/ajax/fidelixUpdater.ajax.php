@@ -671,7 +671,7 @@ JSCODE;
         }
 
         // Get Jeedom logs for this process (filter by updateId)
-        $jeedomLogFile = '/var/log/jeedom/fidelixUpdater';
+        $jeedomLogFile = __DIR__ . '/../../../../log/fidelixUpdater';
         if (file_exists($jeedomLogFile)) {
             $jeedomContent = file_get_contents($jeedomLogFile);
             $lines = explode("\n", $jeedomContent);

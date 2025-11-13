@@ -70,7 +70,7 @@ if (!isConnect('admin')) {
                     $usbMapping = jeedom::getUsbMapping('', true);
                     if (is_array($usbMapping)) {
                         foreach ($usbMapping as $key => $value) {
-                            echo '<option value="' . $key . '">' . $key . ' (' . $value . ')</option>';
+                            echo '<option value="' . $value . '">' . $key . ' (' . $value . ')</option>';
                         }
                     }
                     ?>
