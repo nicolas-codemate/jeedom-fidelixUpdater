@@ -167,8 +167,9 @@ try {
         if ($subaddress !== null) {
             $logMsg .= ', Subaddress: ' . $subaddress . ' (pass-through mode)';
         }
-        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filePath;
+        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filePath . ', Port: ' . $port;
         log::add('fidelixUpdater', 'info', $logMsg);
+        log::add('fidelixUpdater', 'debug', 'Port value received from frontend: "' . $port . '"');
 
         // Initialize status file
         $initialStatus = array(
@@ -265,6 +266,12 @@ multi24Update.update('{$filePath}', options)
 JSCODE;
 
         file_put_contents($scriptPath, $jsCode);
+
+        // Log generated script for debugging
+        log::add('fidelixUpdater', 'debug', 'Generated Node.js script content:');
+        log::add('fidelixUpdater', 'debug', '--- START SCRIPT ---');
+        log::add('fidelixUpdater', 'debug', $jsCode);
+        log::add('fidelixUpdater', 'debug', '--- END SCRIPT ---');
 
         // Ensure logs directory exists
         fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('logs'));
