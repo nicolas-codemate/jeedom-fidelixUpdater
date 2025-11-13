@@ -1,5 +1,13 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.3 - 2025-11-13
+
+- 🐛 Correction sélection port série (inversion key/value dans dropdown)
+- 🐛 Ajout callback d'erreur sur flush() pour éviter crash ouverture port
+- ✨ Bouton "Copier" dans visualiseur de logs
+- 🐛 Correction chemin logs Jeedom
+- 🎨 Valeurs par défaut : Software + 38400 bauds
+
 ## Version 1.0.2 - 2025-11-13
 
 - ⏱️ Ajout d'un délai de 500ms après ouverture du port série pour tenter de corriger l'erreur "Port is not open"
