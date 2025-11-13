@@ -1,5 +1,9 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.2 - 2025-11-13
+
+- ⏱️ Ajout d'un délai de 500ms après ouverture du port série pour tenter de corriger l'erreur "Port is not open"
+
 ## Version 1.0.1 - 2025-11-12
 
 ### Améliorations et corrections
