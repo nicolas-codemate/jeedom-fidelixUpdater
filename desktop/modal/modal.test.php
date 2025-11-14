@@ -58,12 +58,12 @@ if (!isConnect('admin')) {
                 <label>{{Vitesse de communication (Baud Rate)}}</label>
                 <select class="form-control" id="testBaudRate">
                     <option value="9600">9600</option>
-                    <option value="19200" selected>19200</option>
-                    <option value="38400">38400</option>
+                    <option value="19200">19200</option>
+                    <option value="38400" selected>38400</option>
                     <option value="57600">57600</option>
                     <option value="115200">115200</option>
                 </select>
-                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 19200 pour Multi24)}}</small>
+                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
             </div>
 
             <div class="form-group">

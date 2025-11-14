@@ -86,7 +86,7 @@ if (!isConnect('admin')) {
                     <option value="57600">57600</option>
                     <option value="115200">115200</option>
                 </select>
-                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 19200 pour Multi24)}}</small>
+                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
             </div>
 
             <div class="form-group">

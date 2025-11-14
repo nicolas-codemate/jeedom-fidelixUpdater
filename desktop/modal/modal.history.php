@@ -20,6 +20,7 @@ $history = fidelixUpdater::getProcessHistory(50);
                 <tr>
                     <th style="width:130px">{{Port}}</th>
                     <th style="width:90px">{{Type}}</th>
+                    <th style="width:100px">{{Utilisateur}}</th>
                     <th style="width:90px">{{Adresse}}</th>
                     <th style="width:90px">{{Statut}}</th>
                     <th style="width:70px">{{Progression}}</th>
@@ -85,6 +86,7 @@ $history = fidelixUpdater::getProcessHistory(50);
                     <tr>
                         <td><?php echo $portShort; ?></td>
                         <td><?php echo $typeLabel; ?></td>
+                        <td><?php echo isset($process['username']) ? $process['username'] : '-'; ?></td>
                         <td><?php echo $addressLabel; ?></td>
                         <td><span class="label label-<?php echo $statusClass; ?>"><?php echo $statusLabel; ?></span></td>
                         <td><?php echo $process['progress']; ?>%<?php echo $errorIcon; ?></td>

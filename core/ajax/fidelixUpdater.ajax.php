@@ -124,6 +124,16 @@ try {
         $filename = init('filename');
         $method = init('method');
 
+        // Capture Jeedom username
+        $username = 'system';
+        if (isset($_SESSION['user']) && is_object($_SESSION['user'])) {
+            try {
+                $username = $_SESSION['user']->getLogin();
+            } catch (Exception $e) {
+                log::add('fidelixUpdater', 'debug', 'Unable to get username: ' . $e->getMessage());
+            }
+        }
+
         if (empty($address) || $address < 1 || $address > 247) {
             throw new Exception('Adresse device invalide (doit être entre 1 et 247) : ' . $address);
         }
@@ -163,7 +173,7 @@ try {
         $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptPath = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
 
-        $logMsg = 'Démarrage mise à jour - UpdateID: ' . $updateId . ', Address: ' . $address;
+        $logMsg = 'Démarrage mise à jour par ' . $username . ' - UpdateID: ' . $updateId . ', Address: ' . $address;
         if ($subaddress !== null) {
             $logMsg .= ', Subaddress: ' . $subaddress . ' (pass-through mode)';
         }
@@ -299,6 +309,7 @@ JSCODE;
             'subaddress' => $subaddress,
             'type' => $method,
             'filename' => basename($filename),
+            'username' => $username,
             'nodejsLog' => $nodejsLog,
             'stderrLog' => $stderrLog
         ));

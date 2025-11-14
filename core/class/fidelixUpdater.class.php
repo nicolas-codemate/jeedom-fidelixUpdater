@@ -229,6 +229,7 @@ class fidelixUpdater extends eqLogic {
             'subaddress' => isset($processData['subaddress']) ? $processData['subaddress'] : null,
             'type' => $processData['type'],
             'filename' => $processData['filename'],
+            'username' => isset($processData['username']) ? $processData['username'] : 'system',
             'status' => 'running',
             'phase' => 'Starting',
             'progress' => 0,
@@ -608,11 +609,12 @@ class fidelixUpdater extends eqLogic {
     }
 
     /**
-     * Cron function called by Jeedom
+     * Hourly cron function called by Jeedom
      * Performs cleanup of old processes and temporary files
+     * Frequency: hourly (ensures quick process sync and port unlocking)
      */
-    public static function cron() {
-        log::add('fidelixUpdater', 'debug', 'Running cron cleanup');
+    public static function cronHourly() {
+        log::add('fidelixUpdater', 'debug', 'Running hourly cron cleanup');
 
         // Sync active processes first
         $synced = self::syncActiveProcesses();
