@@ -303,9 +303,35 @@ L'historique est affiché sur la page principale du plugin avec :
 
 ![Capture - Historique des mises à jour](./images/update_history.png)
 
-### Nettoyage automatique
+### Stratégie de rétention et nettoyage automatique
 
-L'historique est automatiquement limité aux **100 dernières entrées** pour éviter une croissance excessive du fichier.
+Un **cron horaire** (`cronHourly()`) effectue automatiquement les opérations suivantes :
+
+**1. Synchronisation des processus actifs**
+- Lecture des fichiers de statut pour mettre à jour le registry
+- Détection automatique des processus terminés (succès ou erreur)
+- Détection des crashs silencieux (processus morts depuis >30s)
+- Libération des ports série bloqués
+
+**2. Nettoyage de l'historique**
+- Processus terminés depuis **plus de 7 jours** : supprimés
+- Si reste > **50 entrées** : conservation des 50 plus récentes uniquement
+- Processus en cours (`running`) : **jamais supprimés**
+
+**3. Nettoyage des fichiers temporaires**
+
+| Type de fichier | Rétention | Suppression |
+|----------------|-----------|-------------|
+| Status files (`.json`) | 0 jour | Dès que processus terminé |
+| Scripts Node.js (`.js`) | 0 jour | Dès que processus terminé |
+| Logs stderr (`.log`) | 7 jours | 7 jours après fin du processus |
+| Fichiers uploadés (`.hex`, `.M24IEC`) | 0 jour | Dès que processus terminé |
+
+**Pourquoi cron horaire ?**
+- Détection rapide des fins de processus (<1h)
+- Libération rapide des ports série bloqués
+- Détection des crashs silencieux
+- Équilibre entre réactivité et charge système
 
 ---
 

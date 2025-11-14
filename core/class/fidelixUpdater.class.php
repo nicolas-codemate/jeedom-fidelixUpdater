@@ -608,11 +608,12 @@ class fidelixUpdater extends eqLogic {
     }
 
     /**
-     * Cron function called by Jeedom
+     * Hourly cron function called by Jeedom
      * Performs cleanup of old processes and temporary files
+     * Recommended frequency: hourly (ensures quick process sync and port unlocking)
      */
-    public static function cron() {
-        log::add('fidelixUpdater', 'debug', 'Running cron cleanup');
+    public static function cronHourly() {
+        log::add('fidelixUpdater', 'debug', 'Running hourly cron cleanup');
 
         // Sync active processes first
         $synced = self::syncActiveProcesses();
@@ -624,6 +625,14 @@ class fidelixUpdater extends eqLogic {
         $removedFiles = self::cleanupTempFiles();
 
         log::add('fidelixUpdater', 'info', "Cron cleanup completed: synced={$synced}, removed_processes={$removedProcesses}, removed_status_files={$removedFiles['status']}, removed_script_files={$removedFiles['scripts']}, removed_stderr_logs={$removedFiles['stderrlogs']}, removed_upload_files={$removedFiles['uploads']}");
+    }
+
+    /**
+     * Legacy cron function for backward compatibility
+     * @deprecated Use cronHourly() instead
+     */
+    public static function cron() {
+        self::cronHourly();
     }
 
     /**
