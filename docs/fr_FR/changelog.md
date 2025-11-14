@@ -3,8 +3,8 @@
 ## Version 1.0.4 - 2025-11-14
 
 - ✨ Vitesse par défaut à 38400 bauds dans modale de test de connexion
-- 📝 Traçabilité : affichage de l'utilisateur Jeedom dans l'historique et les logs
-- 🔧 Cron passé en mode horaire (`cronHourly`) pour meilleure réactivité
+- 📝 Traçabilité : affichage de l'utilisateur Jeedom dans historique, logs et processus actifs
+- 🔧 Cron passé en mode horaire (`cronHourly`)
 - 📚 Documentation : stratégie de rétention complète et précise (7 jours, 50 entrées max)
 
 ## Version 1.0.3 - 2025-11-13

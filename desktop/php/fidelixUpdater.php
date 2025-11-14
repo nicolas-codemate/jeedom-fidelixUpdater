@@ -48,6 +48,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                         <tr>
                             <th style="width:150px">{{Port}}</th>
                             <th style="width:100px">{{Type}}</th>
+                            <th style="width:100px">{{Utilisateur}}</th>
                             <th style="width:80px">{{Adresse}}</th>
                             <th style="width:150px">{{Phase}}</th>
                             <th style="width:120px">{{Progression}}</th>
@@ -179,14 +180,15 @@ function updateActiveProcessesTable(processes) {
         if (existingRows[process.updateId]) {
             // Update existing row
             var $row = existingRows[process.updateId];
-            $row.find('td:eq(3)').html(process.phase + statusBadge);
-            $row.find('td:eq(4)').html(progressBar);
-            $row.find('td:eq(5)').html(startTime);
+            $row.find('td:eq(4)').html(process.phase + statusBadge);
+            $row.find('td:eq(5)').html(progressBar);
+            $row.find('td:eq(6)').html(startTime);
         } else {
             // Create new row
             var row = '<tr data-update-id="' + process.updateId + '">' +
                 '<td>' + portShort + '</td>' +
                 '<td>' + typeLabel + '</td>' +
+                '<td>' + (process.username || '-') + '</td>' +
                 '<td>' + addressLabel + '</td>' +
                 '<td>' + process.phase + statusBadge + '</td>' +
                 '<td>' + progressBar + '</td>' +
