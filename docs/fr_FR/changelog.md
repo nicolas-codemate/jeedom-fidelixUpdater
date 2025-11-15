@@ -1,5 +1,9 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.5 - 2025-11-15
+
+- ✨ Support des modules Display : firmware (.hex) et graphics (.bin) avec mode pass-through
+
 ## Version 1.0.4 - 2025-11-14
 
 - ✨ Vitesse par défaut à 38400 bauds dans modale de test de connexion

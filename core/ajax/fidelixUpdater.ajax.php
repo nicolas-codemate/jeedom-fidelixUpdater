@@ -89,8 +89,8 @@ try {
         }
 
         $extension = strtolower(strrchr($_FILES['file']['name'], '.'));
-        if (!in_array($extension, array('.m24iec'))) {
-            throw new Exception('Extension du fichier non valide (autorisé .M24IEC) : ' . $extension);
+        if (!in_array($extension, array('.m24iec', '.bin'))) {
+            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .bin) : ' . $extension);
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -155,8 +155,8 @@ try {
             throw new Exception('Nom de fichier non spécifié');
         }
 
-        if (!in_array($method, array('m24firmware', 'm24software'))) {
-            throw new Exception('Méthode invalide (doit être m24firmware ou m24software) : ' . $method);
+        if (!in_array($method, array('m24firmware', 'm24software', 'displayfirmware', 'displaygraphics'))) {
+            throw new Exception('Méthode invalide (doit être m24firmware, m24software, displayfirmware ou displaygraphics) : ' . $method);
         }
 
         // Build full path to the firmware/software file
