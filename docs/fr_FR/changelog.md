@@ -1,5 +1,10 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.6 - 2025-11-15
+
+- ✨ Contrôle automatique du daemon Modbus : arrêt/redémarrage pendant les mises à jour pour éviter les conflits série
+- 🎨 Configuration : affichage conditionnel selon présence et activation du plugin Modbus
+
 ## Version 1.0.5 - 2025-11-15
 
 - ✨ Support des modules Display : firmware (.hex) et graphics (.bin) avec mode pass-through

@@ -95,6 +95,12 @@ if (!isConnect('admin')) {
                 <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
             </div>
 
+            <div class="alert alert-info" style="margin-bottom: 15px;">
+                <i class="fas fa-info-circle"></i>
+                <strong>{{Plugin Modbus}}</strong> :
+                {{Le daemon du plugin Modbus sera automatiquement arrêté pendant la mise à jour et redémarré ensuite pour éviter les conflits d'accès au port série.}}
+            </div>
+
             <div class="form-group">
                 <button class="btn btn-success btn-lg btn-block" id="btnStartUpdate">
                     <i class="fas fa-play"></i> {{Démarrer la mise à jour}}

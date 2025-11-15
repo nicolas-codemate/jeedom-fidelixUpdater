@@ -750,6 +750,110 @@ class fidelixUpdater extends eqLogic {
         @unlink($scriptFile);
     }
 
+    /**
+     * Stop Modbus daemon if needed and configured
+     *
+     * @param string $port Serial port that will be used for update
+     * @return array Status of operation
+     */
+    public static function stopModbusDaemonIfNeeded($port) {
+        $autoControl = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+        if (!$autoControl) {
+            return array(
+                'stopped' => false,
+                'wasRunning' => false,
+                'reason' => 'Automatic control disabled'
+            );
+        }
+
+        try {
+            $modbusPlugin = plugin::byId('modbus');
+
+            if (!is_object($modbusPlugin)) {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus plugin not found'
+                );
+            }
+
+            if ($modbusPlugin->isActive() != 1) {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus plugin not active'
+                );
+            }
+
+            if (!$modbusPlugin->getHasOwnDeamon()) {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus plugin has no daemon'
+                );
+            }
+
+            $daemonInfo = $modbusPlugin->deamon_info();
+
+            if ($daemonInfo['state'] != 'ok') {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus daemon already stopped'
+                );
+            }
+
+            log::add('fidelixUpdater', 'info', "Stopping Modbus daemon for update (port: {$port})");
+            $modbusPlugin->deamon_stop();
+
+            sleep(2);
+
+            return array(
+                'stopped' => true,
+                'wasRunning' => true,
+                'pluginId' => 'modbus'
+            );
+
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to stop Modbus daemon: ' . $e->getMessage());
+            return array(
+                'stopped' => false,
+                'wasRunning' => false,
+                'reason' => 'Exception: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * Restart Modbus daemon if it was stopped by us
+     *
+     * @param array $stopStatus Result from stopModbusDaemonIfNeeded()
+     * @return bool Success of restart
+     */
+    public static function restartModbusDaemonIfNeeded($stopStatus) {
+        if (!isset($stopStatus['stopped']) || !$stopStatus['stopped']) {
+            return false;
+        }
+
+        if (!isset($stopStatus['wasRunning']) || !$stopStatus['wasRunning']) {
+            return false;
+        }
+
+        try {
+            $modbusPlugin = plugin::byId('modbus');
+
+            if (is_object($modbusPlugin)) {
+                log::add('fidelixUpdater', 'info', 'Restarting Modbus daemon after update');
+                $modbusPlugin->deamon_start(false, false);
+                return true;
+            }
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to restart Modbus daemon: ' . $e->getMessage());
+        }
+
+        return false;
+    }
+
     /*     * *********************Méthodes d'instance************************* */
 
     public function preInsert() {
