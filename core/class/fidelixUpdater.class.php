@@ -842,11 +842,19 @@ class fidelixUpdater extends eqLogic {
         try {
             $modbusPlugin = plugin::byId('modbus');
 
-            if (is_object($modbusPlugin)) {
-                log::add('fidelixUpdater', 'info', 'Restarting Modbus daemon after update');
-                $modbusPlugin->deamon_start(false, false);
-                return true;
+            if (!is_object($modbusPlugin)) {
+                log::add('fidelixUpdater', 'debug', 'Modbus plugin not found, cannot restart daemon');
+                return false;
             }
+
+            if ($modbusPlugin->isActive() != 1) {
+                log::add('fidelixUpdater', 'debug', 'Modbus plugin not active, cannot restart daemon');
+                return false;
+            }
+
+            log::add('fidelixUpdater', 'info', 'Restarting Modbus daemon after update');
+            $modbusPlugin->deamon_start(false, false);
+            return true;
         } catch (Exception $e) {
             log::add('fidelixUpdater', 'error', 'Failed to restart Modbus daemon: ' . $e->getMessage());
         }
