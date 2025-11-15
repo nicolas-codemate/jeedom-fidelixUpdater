@@ -181,13 +181,22 @@ try {
         log::add('fidelixUpdater', 'info', $logMsg);
         log::add('fidelixUpdater', 'debug', 'Port value received from frontend: "' . $port . '"');
 
+        // Stop Modbus daemon if needed
+        $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
+        if ($modbusStatus['stopped']) {
+            log::add('fidelixUpdater', 'info', 'Modbus daemon stopped successfully');
+        } else if (isset($modbusStatus['reason'])) {
+            log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped: ' . $modbusStatus['reason']);
+        }
+
         // Initialize status file
         $initialStatus = array(
             'phase' => 'Starting',
             'status' => 'Initializing update...',
             'progress' => 0,
             'timestamp' => date('c'),
-            'error' => null
+            'error' => null,
+            'modbusStatus' => $modbusStatus
         );
         file_put_contents($statusFile, json_encode($initialStatus, JSON_PRETTY_PRINT));
 
@@ -414,6 +423,17 @@ JSCODE;
         $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptFile = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
         // Note: We keep stderr logs for historical processes (they will be cleaned by cron after 7 days)
+
+        // Try to restart Modbus daemon if it was stopped
+        if (file_exists($statusFile)) {
+            $status = json_decode(file_get_contents($statusFile), true);
+            if (isset($status['modbusStatus'])) {
+                $restarted = fidelixUpdater::restartModbusDaemonIfNeeded($status['modbusStatus']);
+                if ($restarted) {
+                    log::add('fidelixUpdater', 'info', 'Modbus daemon restarted after update cleanup');
+                }
+            }
+        }
 
         $deleted = array();
 

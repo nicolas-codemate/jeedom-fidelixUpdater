@@ -30,6 +30,15 @@ require_once dirname(__FILE__) . '/../core/class/fidelixUpdaterHelper.class.php'
 $diagnostics = fidelixUpdaterHelper::getSystemDiagnostics();
 $serialPorts = $diagnostics['serial']['ports'];
 
+// Check if Modbus plugin is installed and enabled
+$modbusInstalled = false;
+try {
+    $modbusPlugin = plugin::byId('modbus');
+    $modbusInstalled = is_object($modbusPlugin) && $modbusPlugin->isActive() == 1;
+} catch (Exception $e) {
+    $modbusInstalled = false;
+}
+
 // Overall status
 $allOk = $diagnostics['nodejs']['installed'] &&
          $diagnostics['dialout']['ok'] &&
@@ -74,36 +83,63 @@ $allOk = $diagnostics['nodejs']['installed'] &&
 
 <form class="form-horizontal">
     <fieldset>
-        <!-- Overall Status -->
-        <div class="form-group">
-            <label class="col-md-12">
-                <legend><i class="fas fa-cogs"></i> {{Diagnostic système}}</legend>
-            </label>
+        <div class="row">
+            <?php if ($modbusInstalled): ?>
+            <!-- Configuration Column -->
+            <div class="col-lg-6">
+                <div class="form-group">
+                    <label class="col-md-12">
+                        <legend><i class="fas fa-sliders-h"></i> {{Configuration}}</legend>
+                    </label>
+                </div>
+
+                <div class="col-md-12">
+                    <div style="border: 1px solid #ddd; border-radius: 4px; padding: 20px; background-color: #fafafa; margin-bottom: 15px;">
+                        <div style="margin-bottom: 12px;">
+                            <label style="font-weight: normal; cursor: pointer; font-size: 15px; display: flex; align-items: center;">
+                                <input type="checkbox" class="configKey" data-l1key="auto_stop_modbus" checked style="margin-right: 10px; cursor: pointer; transform: scale(1.3);"/>
+                                <span style="font-weight: 600; color: #333;">{{Arrêt automatique du daemon Modbus}}</span>
+                            </label>
+                        </div>
+                        <div style="padding-left: 28px; font-size: 13px; color: #777; line-height: 1.6;">
+                            {{Arrête temporairement le daemon du plugin Modbus pendant les mises à jour pour éviter les conflits d'accès au port série RS485. Le daemon sera automatiquement redémarré après.}}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- Diagnostic Column -->
+            <div class="<?php echo $modbusInstalled ? 'col-lg-6' : 'col-lg-12'; ?>">
+                <div class="form-group">
+                    <label class="col-md-12">
+                        <legend><i class="fas fa-stethoscope"></i> {{Diagnostic}}</legend>
+                    </label>
+                </div>
+
+                <div class="col-md-12">
+                    <?php if ($allOk): ?>
+                        <div class="alert alert-success" style="padding: 10px 15px; margin-bottom: 15px;">
+                            <i class="fas fa-check-circle"></i> {{Tous les prérequis sont satisfaits}}
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-warning" style="padding: 10px 15px; margin-bottom: 15px;">
+                            <i class="fas fa-exclamation-triangle"></i> {{Certains prérequis ne sont pas satisfaits}}
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Fix button -->
+                    <div style="margin-bottom: 15px;">
+                        <button type="button" class="btn btn-warning" id="btnFixPermissions">
+                            <i class="fas fa-wrench"></i> {{Reconfigurer les permissions}}
+                        </button>
+                        <span id="fixStatus" style="margin-left: 10px;"></span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="col-md-12">
-            <?php if ($allOk): ?>
-                <div class="alert alert-success">
-                    <h4><i class="fas fa-check-circle"></i> {{Configuration correcte}}</h4>
-                    <p>{{Tous les prérequis sont satisfaits. Le plugin est prêt à fonctionner.}}</p>
-                </div>
-            <?php else: ?>
-                <div class="alert alert-warning">
-                    <h4><i class="fas fa-exclamation-triangle"></i> {{Configuration incomplète}}</h4>
-                    <p>{{Certains prérequis ne sont pas satisfaits. Utilisez le bouton ci-dessous pour corriger automatiquement.}}</p>
-                </div>
-            <?php endif; ?>
-
-            <!-- Fix button -->
-            <div class="form-group">
-                <div class="col-md-12">
-                    <button type="button" class="btn btn-warning btn-lg" id="btnFixPermissions">
-                        <i class="fas fa-wrench"></i> {{Reconfigurer les permissions}}
-                    </button>
-                    <span id="fixStatus" style="margin-left: 15px;"></span>
-                </div>
-            </div>
-
             <hr>
 
             <!-- Diagnostics Details -->
