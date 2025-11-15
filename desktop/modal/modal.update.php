@@ -33,8 +33,14 @@ if (!isConnect('admin')) {
             <div class="form-group">
                 <label>{{Type de mise à jour}}</label>
                 <select class="form-control" id="updateType">
-                    <option value="m24firmware">{{Firmware}} (.hex)</option>
-                    <option value="m24software" selected>{{Software}} (.M24IEC)</option>
+                    <optgroup label="Multi24 Controller">
+                        <option value="m24firmware">{{Firmware Multi24}} (.hex)</option>
+                        <option value="m24software" selected>{{Software Multi24}} (.M24IEC)</option>
+                    </optgroup>
+                    <optgroup label="Display Touchscreen">
+                        <option value="displayfirmware">{{Firmware Display}} (.hex)</option>
+                        <option value="displaygraphics">{{Graphics Display}} (.bin)</option>
+                    </optgroup>
                 </select>
             </div>
 
@@ -43,7 +49,7 @@ if (!isConnect('admin')) {
                 <div class="input-group">
                     <span class="input-group-btn">
                         <span class="btn btn-default btn-file">
-                            <i class="fas fa-cloud-upload-alt"></i> {{Parcourir}}<input type="file" id="fileUpload" accept=".hex,.M24IEC" style="display: inline-block;">
+                            <i class="fas fa-cloud-upload-alt"></i> {{Parcourir}}<input type="file" id="fileUpload" accept=".hex,.M24IEC,.bin" style="display: inline-block;">
                         </span>
                     </span>
                     <input type="text" class="form-control" id="fileNameDisplay" readonly placeholder="{{Aucun fichier sélectionné}}">
@@ -163,14 +169,20 @@ $(function() {
         const updateType = $('#updateType').val();
 
         // Validate extension based on update type
-        if (updateType === 'm24firmware' && extension !== '.hex') {
+        if ((updateType === 'm24firmware' || updateType === 'displayfirmware') && extension !== '.hex') {
             $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .hex pour firmware}}', level: 'danger'});
             $(this).val('');
             return;
         }
 
         if (updateType === 'm24software' && extension !== '.m24iec') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .M24IEC pour software}}', level: 'danger'});
+            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .M24IEC pour software Multi24}}', level: 'danger'});
+            $(this).val('');
+            return;
+        }
+
+        if (updateType === 'displaygraphics' && extension !== '.bin') {
+            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .bin pour graphics Display}}', level: 'danger'});
             $(this).val('');
             return;
         }
@@ -182,7 +194,7 @@ $(function() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const action = (updateType === 'm24firmware') ? 'uploadFirmware' : 'uploadSoftware';
+        const action = (updateType === 'm24firmware' || updateType === 'displayfirmware') ? 'uploadFirmware' : 'uploadSoftware';
 
         $.ajax({
             url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php?action=' + action,
@@ -208,10 +220,12 @@ $(function() {
     // Update type change handler
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
-        if (updateType === 'm24firmware') {
+        if (updateType === 'm24firmware' || updateType === 'displayfirmware') {
             $('#fileUpload').attr('accept', '.hex');
-        } else {
+        } else if (updateType === 'm24software') {
             $('#fileUpload').attr('accept', '.M24IEC,.m24iec');
+        } else if (updateType === 'displaygraphics') {
+            $('#fileUpload').attr('accept', '.bin,.BIN');
         }
         // Reset upload
         $('#fileUpload').val('');
