@@ -98,7 +98,6 @@ class fidelixUpdater extends eqLogic {
             if ($pluginPath === false) {
                 throw new Exception('Cannot resolve plugin directory path');
             }
-            log::add('fidelixUpdater', 'debug', 'Plugin path resolved to: ' . $pluginPath);
         }
 
         return $pluginPath;
@@ -606,6 +605,112 @@ class fidelixUpdater extends eqLogic {
         }
 
         return $removed;
+    }
+
+    /**
+     * Cron5 callback - runs every 5 minutes
+     * Checks completed processes and restarts Modbus daemon if needed
+     * This is a fallback mechanism in case Node.js callback fails
+     *
+     * Frequency: every 5 minutes
+     */
+    public static function cron5() {
+        log::add('fidelixUpdater', 'debug', 'Running cron5 Modbus daemon restart check');
+
+        // Sync active processes first
+        self::syncActiveProcesses();
+
+        $registry = self::loadProcessesRegistry();
+        $restarted = 0;
+        $checked = 0;
+
+        foreach ($registry['processes'] as $process) {
+            // Only check completed processes (not running)
+            if ($process['status'] === 'running') {
+                continue;
+            }
+
+            $checked++;
+            $statusFile = self::getDataPath('status') . '/status_' . $process['updateId'] . '.json';
+
+            if (!file_exists($statusFile)) {
+                continue;
+            }
+
+            $status = json_decode(file_get_contents($statusFile), true);
+
+            if ($status === null) {
+                log::add('fidelixUpdater', 'error', "cron5: invalid JSON in status file for {$process['updateId']}");
+                continue;
+            }
+
+            // Check if daemon already restarted
+            if (isset($status['modbusRestarted']) && $status['modbusRestarted'] === true) {
+                continue;
+            }
+
+            // Check modbusStatus conditions
+            if (!isset($status['modbusStatus'])) {
+                continue;
+            }
+
+            $modbusStatus = $status['modbusStatus'];
+
+            // Strict conditions: only restart if WE stopped it
+            if (!isset($modbusStatus['stopped']) || $modbusStatus['stopped'] !== true) {
+                continue;
+            }
+
+            if (!isset($modbusStatus['wasRunning']) || $modbusStatus['wasRunning'] !== true) {
+                continue;
+            }
+
+            // Verify daemon is still stopped
+            try {
+                $modbusPlugin = plugin::byId('modbus');
+
+                if (!is_object($modbusPlugin) || $modbusPlugin->isActive() != 1) {
+                    continue;
+                }
+
+                $daemonInfo = $modbusPlugin->deamon_info();
+
+                // If daemon already running, mark as restarted to avoid future checks
+                if ($daemonInfo['state'] === 'ok') {
+                    $status['modbusRestarted'] = true;
+                    file_put_contents($statusFile, json_encode($status, JSON_PRETTY_PRINT));
+                    log::add('fidelixUpdater', 'debug', "cron5: daemon already running for {$process['updateId']}, marked as restarted");
+                    continue;
+                }
+            } catch (Exception $e) {
+                log::add('fidelixUpdater', 'error', "cron5: exception checking daemon state for {$process['updateId']}: " . $e->getMessage());
+                continue;
+            }
+
+            // Attempt restart
+            try {
+                $restart = self::restartModbusDaemonIfNeeded($modbusStatus);
+
+                if ($restart) {
+                    // Set flag
+                    $status['modbusRestarted'] = true;
+                    file_put_contents($statusFile, json_encode($status, JSON_PRETTY_PRINT));
+
+                    $restarted++;
+                    log::add('fidelixUpdater', 'info', "Cron5 restarted Modbus daemon for updateId={$process['updateId']} (Node.js callback likely failed)");
+                } else {
+                    log::add('fidelixUpdater', 'debug', "cron5: restart returned false for {$process['updateId']}");
+                }
+            } catch (Exception $e) {
+                log::add('fidelixUpdater', 'error', "cron5: exception restarting daemon for {$process['updateId']}: " . $e->getMessage());
+            }
+        }
+
+        if ($restarted > 0) {
+            log::add('fidelixUpdater', 'info', "Cron5 completed: checked={$checked} completed processes, restarted={$restarted} daemon(s)");
+        } else {
+            log::add('fidelixUpdater', 'debug', "Cron5 completed: checked={$checked} completed processes, restarted=0");
+        }
     }
 
     /**

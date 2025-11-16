@@ -198,7 +198,8 @@ try {
             'progress' => 0,
             'timestamp' => date('c'),
             'error' => null,
-            'modbusStatus' => $modbusStatus
+            'modbusStatus' => $modbusStatus,
+            'modbusRestarted' => false
         );
         file_put_contents($statusFile, json_encode($initialStatus, JSON_PRETTY_PRINT));
 
@@ -274,15 +275,36 @@ const options = {
     statusFile: '{$statusFile}'
 };
 
+// Function to notify PHP of completion and restart Modbus daemon
+function notifyPhpComplete() {
+    const { exec } = require('child_process');
+    const phpScript = __dirname + '/../core/php/restartModbusDaemon.php';
+    const cmd = 'php ' + phpScript + ' {$updateId}';
+
+    console.log('[fidelixUpdater] Calling PHP to restart Modbus daemon...');
+
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) {
+            console.error('[fidelixUpdater] Failed to call restart daemon script:', error.message);
+            if (stderr) console.error('[fidelixUpdater] stderr:', stderr);
+        } else {
+            console.log('[fidelixUpdater] Daemon restart script called successfully');
+            if (stdout) console.log('[fidelixUpdater] stdout:', stdout);
+        }
+    });
+}
+
 // IMPORTANT: Using FULL ABSOLUTE path to firmware/software file
 multi24Update.update('{$filePath}', options)
     .then(() => {
         console.log('Update succeeded');
-        process.exit(0);
+        notifyPhpComplete();
+        setTimeout(() => process.exit(0), 2000);  // 2s delay to let PHP script finish
     })
     .catch((err) => {
         console.error('Update failed: ' + err);
-        process.exit(1);
+        notifyPhpComplete();  // Also notify on failure
+        setTimeout(() => process.exit(1), 2000);
     });
 JSCODE;
 
@@ -425,17 +447,7 @@ JSCODE;
         $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptFile = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
         // Note: We keep stderr logs for historical processes (they will be cleaned by cron after 7 days)
-
-        // Try to restart Modbus daemon if it was stopped
-        if (file_exists($statusFile)) {
-            $status = json_decode(file_get_contents($statusFile), true);
-            if (isset($status['modbusStatus'])) {
-                $restarted = fidelixUpdater::restartModbusDaemonIfNeeded($status['modbusStatus']);
-                if ($restarted) {
-                    log::add('fidelixUpdater', 'info', 'Modbus daemon restarted after update cleanup');
-                }
-            }
-        }
+        // Note: Modbus daemon restart is now handled by Node.js callback (restartModbusDaemon.php) and cron5 fallback
 
         $deleted = array();
 

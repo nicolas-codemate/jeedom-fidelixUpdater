@@ -33,6 +33,33 @@ console.log = function(message) {
 };
 
 // *******************************************************************
+// HELPER FUNCTIONS
+// *******************************************************************
+
+// Helper function to write status file while preserving custom fields
+// PATCHED: Preserve modbusStatus and modbusRestarted fields added by PHP
+function writeStatusFile(filePath, updates) {
+  try {
+    // Read existing status file to preserve custom fields (modbusStatus, modbusRestarted, etc.)
+    let existingData = {};
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      existingData = JSON.parse(fileContent);
+    }
+
+    // Merge updates with existing data
+    const statusData = {
+      ...existingData,  // Preserve existing fields
+      ...updates         // Override with new values
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(statusData, null, 2));
+  } catch (err) {
+    fxLog.debug("Failed to write status file: " + err);
+  }
+}
+
+// *******************************************************************
 // MULTI24 UPDATE ROUTINES
 // *******************************************************************
 
@@ -84,18 +111,13 @@ function fxM24Update() {
 
     // Write to status file if provided (Solution 3)
     if (self.statusFile) {
-      try {
-        const statusData = {
-          phase: notify.phase || 'Unknown',
-          status: notify.status || '',
-          progress: Math.round(notify.progress) || 0,
-          timestamp: new Date().toISOString(),
-          error: null
-        };
-        fs.writeFileSync(self.statusFile, JSON.stringify(statusData, null, 2));
-      } catch (err) {
-        fxLog.debug("Failed to write status file: " + err);
-      }
+      writeStatusFile(self.statusFile, {
+        phase: notify.phase || 'Unknown',
+        status: notify.status || '',
+        progress: Math.round(notify.progress) || 0,
+        timestamp: new Date().toISOString(),
+        error: null
+      });
     }
   }
 
@@ -191,18 +213,14 @@ function fxM24Update() {
     self.statusFile = options.statusFile || null;
     if (self.statusFile) {
       fxLog.debug("Status file enabled: " + self.statusFile);
-      // Initialize status file
-      try {
-        fs.writeFileSync(self.statusFile, JSON.stringify({
-          phase: 'Initializing',
-          status: 'Starting update...',
-          progress: 0,
-          timestamp: new Date().toISOString(),
-          error: null
-        }, null, 2));
-      } catch (err) {
-        fxLog.debug("Failed to initialize status file: " + err);
-      }
+      // Initialize status file (preserve existing fields from PHP)
+      writeStatusFile(self.statusFile, {
+        phase: 'Initializing',
+        status: 'Starting update...',
+        progress: 0,
+        timestamp: new Date().toISOString(),
+        error: null
+      });
     }
 
     if (device === fxFwUpdate) {
@@ -320,17 +338,13 @@ function fxM24Update() {
 
         // PATCHED: Write error to status file immediately
         if (self.statusFile) {
-            try {
-                fs.writeFileSync(self.statusFile, JSON.stringify({
-                    phase: 'Error',
-                    status: 'Update failed',
-                    progress: 0,
-                    timestamp: new Date().toISOString(),
-                    error: String(err)
-                }, null, 2));
-            } catch (writeErr) {
-                fxLog.error("Failed to write error to status file: " + writeErr);
-            }
+            writeStatusFile(self.statusFile, {
+                phase: 'Error',
+                status: 'Update failed',
+                progress: 0,
+                timestamp: new Date().toISOString(),
+                error: String(err)
+            });
         }
 
         // Try to restore device to normal mode
