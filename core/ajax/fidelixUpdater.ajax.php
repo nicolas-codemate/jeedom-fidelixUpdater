@@ -182,6 +182,8 @@ try {
         log::add('fidelixUpdater', 'debug', 'Port value received from frontend: "' . $port . '"');
 
         // Stop Modbus daemon if needed
+        $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+        log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
         $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
         if ($modbusStatus['stopped']) {
             log::add('fidelixUpdater', 'info', 'Modbus daemon stopped successfully');
@@ -582,9 +584,13 @@ JSCODE;
         $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
 
         // Stop Modbus daemon if needed before testing
+        $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+        log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
         $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
         if ($modbusStatus['stopped']) {
             log::add('fidelixUpdater', 'info', 'Modbus daemon stopped for connection test');
+        } else if (isset($modbusStatus['reason'])) {
+            log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped for test: ' . $modbusStatus['reason']);
         }
 
         // Run test script (synchronous - wait for result)
