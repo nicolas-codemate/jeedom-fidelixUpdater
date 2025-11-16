@@ -581,6 +581,12 @@ JSCODE;
         $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
         $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
 
+        // Stop Modbus daemon if needed before testing
+        $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
+        if ($modbusStatus['stopped']) {
+            log::add('fidelixUpdater', 'info', 'Modbus daemon stopped for connection test');
+        }
+
         // Run test script (synchronous - wait for result)
         $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
                escapeshellarg($port) . " " .
@@ -593,6 +599,9 @@ JSCODE;
         exec($cmd, $output, $returnCode);
 
         log::add('fidelixUpdater', 'debug', 'Test command executed - Return code: ' . $returnCode);
+
+        // Restart Modbus daemon if it was stopped
+        fidelixUpdater::restartModbusDaemonIfNeeded($modbusStatus);
 
         // Read result file
         if (file_exists($resultFile)) {
