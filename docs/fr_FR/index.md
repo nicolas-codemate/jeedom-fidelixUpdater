@@ -10,6 +10,7 @@
 - [Historique des mises à jour](#historique-des-mises-à-jour)
 - [Gestion des processus](#gestion-des-processus)
 - [Lock des ports série](#lock-des-ports-série)
+- [Contrôle automatique du daemon Modbus](#contrôle-automatique-du-daemon-modbus)
 - [Dépannage](#dépannage)
 
 ---
@@ -444,6 +445,138 @@ Un **lock orphelin** se produit si :
 - Un kill brutal a été effectué
 
 **Détection automatique :** Le plugin vérifie si le PID associé au lock est toujours actif. Si le PID n'existe plus, le lock orphelin est automatiquement supprimé.
+
+---
+
+## Contrôle automatique du daemon Modbus
+
+### Pourquoi contrôler le daemon Modbus ?
+
+Si vous utilisez le plugin **Modbus** en parallèle de **Fidelix Updater** sur le même port série RS485, un **conflit d'accès** peut se produire :
+
+- ❌ Le daemon Modbus utilise le port série en continu
+- ❌ Fidelix Updater ne peut pas accéder au port pendant une mise à jour
+- ❌ La mise à jour échoue avec une erreur "Port série déjà utilisé"
+
+### Solution automatique
+
+Le plugin **arrête automatiquement** le daemon Modbus avant une mise à jour et le **redémarre après**, de manière **totalement transparente**.
+
+### Configuration
+
+**Emplacement :** `Plugins → Programmation → Fidelix Updater → Configuration`
+
+La configuration apparaît uniquement si le plugin **Modbus** est installé **et activé**.
+
+**Option disponible :**
+- ☑️ **Arrêt automatique du daemon Modbus**
+  - Arrête temporairement le daemon du plugin Modbus pendant les mises à jour
+  - Le redémarre automatiquement une fois la mise à jour terminée
+  - **Activé par défaut** (recommandé)
+
+![Capture - Configuration Modbus](./images/modbus_config.png)
+
+### Fonctionnement détaillé
+
+#### 1. Avant la mise à jour
+
+Lorsque vous lancez une mise à jour (firmware ou software) :
+
+1. **Vérification** : Le plugin vérifie si le daemon Modbus est actif
+2. **Arrêt** : Si actif, il l'arrête proprement (`deamon_stop()`)
+3. **Enregistrement** : Les informations sont sauvegardées dans le fichier de statut :
+   ```json
+   {
+     "modbusStatus": {
+       "stopped": true,
+       "wasRunning": true,
+       "pluginId": "modbus"
+     },
+     "modbusRestarted": false
+   }
+   ```
+4. **Mise à jour** : Le processus de mise à jour démarre normalement
+
+#### 2. Pendant la mise à jour
+
+Le fichier de statut préserve les informations `modbusStatus` et `modbusRestarted` pendant toute la durée de la mise à jour, même si le modal est fermé.
+
+#### 3. Après la mise à jour
+
+Le daemon Modbus est redémarré via un **triple mécanisme de robustesse** :
+
+**Mécanisme principal (Node.js → PHP CLI) :**
+- À la fin du script Node.js (succès ou erreur)
+- Appel automatique du script PHP `restartModbusDaemon.php`
+- Vérification des conditions strictes :
+  - Le daemon a été arrêté par notre processus (`stopped: true`)
+  - Le daemon tournait avant (`wasRunning: true`)
+  - Le daemon n'a pas déjà été redémarré (`modbusRestarted: false`)
+- Si toutes les conditions sont OK : redémarrage du daemon (`deamon_start()`)
+- Mise à jour du flag `modbusRestarted: true` pour éviter les doublons
+
+**Mécanisme de secours #1 (Frontend cleanup) :**
+- Si le modal reste ouvert jusqu'à la fin
+- Le cleanup JavaScript redémarre le daemon si nécessaire
+
+**Mécanisme de secours #2 (Cron5) :**
+- Exécution toutes les 5 minutes
+- Vérifie tous les processus terminés
+- Redémarre le daemon si le mécanisme principal a échoué
+- **Garantie absolue** que le daemon sera redémarré
+
+### Conditions strictes de redémarrage
+
+Pour éviter tout redémarrage intempestif, le daemon Modbus est redémarré **uniquement si** :
+
+1. ✅ Le processus de mise à jour est terminé (succès ou erreur)
+2. ✅ Le daemon a été arrêté **par notre processus** (`stopped: true`)
+3. ✅ Le daemon **tournait avant** l'arrêt (`wasRunning: true`)
+4. ✅ Le daemon **n'a pas déjà été redémarré** (`modbusRestarted: false`)
+5. ✅ Le plugin Modbus existe et est actif
+6. ✅ Le daemon est actuellement arrêté
+
+Si **une seule** de ces conditions n'est pas remplie, le redémarrage est **annulé** pour éviter tout conflit.
+
+### Test de la communication
+
+Le contrôle automatique du daemon Modbus s'applique également lors des **tests de communication** :
+
+1. Arrêt du daemon avant le test
+2. Exécution du test
+3. Redémarrage immédiat du daemon après le test
+
+Cela garantit que le test de communication fonctionne même si le daemon Modbus utilise le même port série.
+
+### Logs et diagnostic
+
+**Logs d'arrêt :**
+```
+[2025-11-16 20:27:15][INFO] : Stopping Modbus daemon for update (port: /dev/ttyUSB0)
+[2025-11-16 20:27:17][INFO] : Modbus daemon stopped successfully
+```
+
+**Logs de redémarrage :**
+```
+[2025-11-16 20:32:45][INFO] : Modbus daemon restarted by Node.js callback for updateId=update_691a2cffe3a883.00807608
+[2025-11-16 20:32:45][INFO] : Restarting Modbus daemon after update
+```
+
+**Logs de skip (conditions non remplies) :**
+```
+[2025-11-16 20:27:24][DEBUG] : Modbus daemon not stopped: Modbus plugin not active
+[2025-11-16 20:27:24][DEBUG] : restartModbusDaemon: daemon already restarted, skipping
+```
+
+### Désactivation
+
+Si vous souhaitez **désactiver** ce comportement :
+
+1. Accédez à la page de configuration
+2. Décochez l'option **"Arrêt automatique du daemon Modbus"**
+3. Sauvegardez
+
+**⚠️ Attention :** Si vous désactivez cette option et que le daemon Modbus utilise le même port série, les mises à jour échoueront avec une erreur "Port série déjà utilisé".
 
 ---
 

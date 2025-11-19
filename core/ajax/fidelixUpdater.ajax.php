@@ -263,13 +263,25 @@ try {
         log::add('fidelixUpdater', 'info', $logMsg);
         log::add('fidelixUpdater', 'debug', 'Port value received from frontend: "' . $port . '"');
 
+        // Stop Modbus daemon if needed
+        $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+        log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
+        $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
+        if ($modbusStatus['stopped']) {
+            log::add('fidelixUpdater', 'info', 'Modbus daemon stopped successfully');
+        } else if (isset($modbusStatus['reason'])) {
+            log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped: ' . $modbusStatus['reason']);
+        }
+
         // Initialize status file
         $initialStatus = array(
             'phase' => 'Starting',
             'status' => 'Initializing update...',
             'progress' => 0,
             'timestamp' => date('c'),
-            'error' => null
+            'error' => null,
+            'modbusStatus' => $modbusStatus,
+            'modbusRestarted' => false
         );
         file_put_contents($statusFile, json_encode($initialStatus, JSON_PRETTY_PRINT));
 
@@ -345,15 +357,36 @@ const options = {
     statusFile: '{$statusFile}'
 };
 
+// Function to notify PHP of completion and restart Modbus daemon
+function notifyPhpComplete() {
+    const { exec } = require('child_process');
+    const phpScript = __dirname + '/../core/php/restartModbusDaemon.php';
+    const cmd = 'php ' + phpScript + ' {$updateId}';
+
+    console.log('[fidelixUpdater] Calling PHP to restart Modbus daemon...');
+
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) {
+            console.error('[fidelixUpdater] Failed to call restart daemon script:', error.message);
+            if (stderr) console.error('[fidelixUpdater] stderr:', stderr);
+        } else {
+            console.log('[fidelixUpdater] Daemon restart script called successfully');
+            if (stdout) console.log('[fidelixUpdater] stdout:', stdout);
+        }
+    });
+}
+
 // IMPORTANT: Using FULL ABSOLUTE path to firmware/software file
 multi24Update.update('{$filePath}', options)
     .then(() => {
         console.log('Update succeeded');
-        process.exit(0);
+        notifyPhpComplete();
+        setTimeout(() => process.exit(0), 2000);  // 2s delay to let PHP script finish
     })
     .catch((err) => {
         console.error('Update failed: ' + err);
-        process.exit(1);
+        notifyPhpComplete();  // Also notify on failure
+        setTimeout(() => process.exit(1), 2000);
     });
 JSCODE;
 
@@ -496,6 +529,7 @@ JSCODE;
         $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptFile = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
         // Note: We keep stderr logs for historical processes (they will be cleaned by cron after 7 days)
+        // Note: Modbus daemon restart is now handled by Node.js callback (restartModbusDaemon.php) and cron5 fallback
 
         $deleted = array();
 
@@ -643,6 +677,16 @@ JSCODE;
         $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
         $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
 
+        // Stop Modbus daemon if needed before testing
+        $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+        log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
+        $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
+        if ($modbusStatus['stopped']) {
+            log::add('fidelixUpdater', 'info', 'Modbus daemon stopped for connection test');
+        } else if (isset($modbusStatus['reason'])) {
+            log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped for test: ' . $modbusStatus['reason']);
+        }
+
         // Run test script (synchronous - wait for result)
         $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
                escapeshellarg($port) . " " .
@@ -655,6 +699,9 @@ JSCODE;
         exec($cmd, $output, $returnCode);
 
         log::add('fidelixUpdater', 'debug', 'Test command executed - Return code: ' . $returnCode);
+
+        // Restart Modbus daemon if it was stopped
+        fidelixUpdater::restartModbusDaemonIfNeeded($modbusStatus);
 
         // Read result file
         if (file_exists($resultFile)) {

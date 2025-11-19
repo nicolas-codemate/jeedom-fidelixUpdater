@@ -98,7 +98,6 @@ class fidelixUpdater extends eqLogic {
             if ($pluginPath === false) {
                 throw new Exception('Cannot resolve plugin directory path');
             }
-            log::add('fidelixUpdater', 'debug', 'Plugin path resolved to: ' . $pluginPath);
         }
 
         return $pluginPath;
@@ -609,6 +608,112 @@ class fidelixUpdater extends eqLogic {
     }
 
     /**
+     * Cron5 callback - runs every 5 minutes
+     * Checks completed processes and restarts Modbus daemon if needed
+     * This is a fallback mechanism in case Node.js callback fails
+     *
+     * Frequency: every 5 minutes
+     */
+    public static function cron5() {
+        log::add('fidelixUpdater', 'debug', 'Running cron5 Modbus daemon restart check');
+
+        // Sync active processes first
+        self::syncActiveProcesses();
+
+        $registry = self::loadProcessesRegistry();
+        $restarted = 0;
+        $checked = 0;
+
+        foreach ($registry['processes'] as $process) {
+            // Only check completed processes (not running)
+            if ($process['status'] === 'running') {
+                continue;
+            }
+
+            $checked++;
+            $statusFile = self::getDataPath('status') . '/status_' . $process['updateId'] . '.json';
+
+            if (!file_exists($statusFile)) {
+                continue;
+            }
+
+            $status = json_decode(file_get_contents($statusFile), true);
+
+            if ($status === null) {
+                log::add('fidelixUpdater', 'error', "cron5: invalid JSON in status file for {$process['updateId']}");
+                continue;
+            }
+
+            // Check if daemon already restarted
+            if (isset($status['modbusRestarted']) && $status['modbusRestarted'] === true) {
+                continue;
+            }
+
+            // Check modbusStatus conditions
+            if (!isset($status['modbusStatus'])) {
+                continue;
+            }
+
+            $modbusStatus = $status['modbusStatus'];
+
+            // Strict conditions: only restart if WE stopped it
+            if (!isset($modbusStatus['stopped']) || $modbusStatus['stopped'] !== true) {
+                continue;
+            }
+
+            if (!isset($modbusStatus['wasRunning']) || $modbusStatus['wasRunning'] !== true) {
+                continue;
+            }
+
+            // Verify daemon is still stopped
+            try {
+                $modbusPlugin = plugin::byId('modbus');
+
+                if (!is_object($modbusPlugin) || $modbusPlugin->isActive() != 1) {
+                    continue;
+                }
+
+                $daemonInfo = $modbusPlugin->deamon_info();
+
+                // If daemon already running, mark as restarted to avoid future checks
+                if ($daemonInfo['state'] === 'ok') {
+                    $status['modbusRestarted'] = true;
+                    file_put_contents($statusFile, json_encode($status, JSON_PRETTY_PRINT));
+                    log::add('fidelixUpdater', 'debug', "cron5: daemon already running for {$process['updateId']}, marked as restarted");
+                    continue;
+                }
+            } catch (Exception $e) {
+                log::add('fidelixUpdater', 'error', "cron5: exception checking daemon state for {$process['updateId']}: " . $e->getMessage());
+                continue;
+            }
+
+            // Attempt restart
+            try {
+                $restart = self::restartModbusDaemonIfNeeded($modbusStatus);
+
+                if ($restart) {
+                    // Set flag
+                    $status['modbusRestarted'] = true;
+                    file_put_contents($statusFile, json_encode($status, JSON_PRETTY_PRINT));
+
+                    $restarted++;
+                    log::add('fidelixUpdater', 'info', "Cron5 restarted Modbus daemon for updateId={$process['updateId']} (Node.js callback likely failed)");
+                } else {
+                    log::add('fidelixUpdater', 'debug', "cron5: restart returned false for {$process['updateId']}");
+                }
+            } catch (Exception $e) {
+                log::add('fidelixUpdater', 'error', "cron5: exception restarting daemon for {$process['updateId']}: " . $e->getMessage());
+            }
+        }
+
+        if ($restarted > 0) {
+            log::add('fidelixUpdater', 'info', "Cron5 completed: checked={$checked} completed processes, restarted={$restarted} daemon(s)");
+        } else {
+            log::add('fidelixUpdater', 'debug', "Cron5 completed: checked={$checked} completed processes, restarted=0");
+        }
+    }
+
+    /**
      * Hourly cron function called by Jeedom
      * Performs cleanup of old processes and temporary files
      * Frequency: hourly (ensures quick process sync and port unlocking)
@@ -748,6 +853,118 @@ class fidelixUpdater extends eqLogic {
 
         @unlink($statusFile);
         @unlink($scriptFile);
+    }
+
+    /**
+     * Stop Modbus daemon if needed and configured
+     *
+     * @param string $port Serial port that will be used for update
+     * @return array Status of operation
+     */
+    public static function stopModbusDaemonIfNeeded($port) {
+        $autoControl = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+        if (!$autoControl) {
+            return array(
+                'stopped' => false,
+                'wasRunning' => false,
+                'reason' => 'Automatic control disabled'
+            );
+        }
+
+        try {
+            $modbusPlugin = plugin::byId('modbus');
+
+            if (!is_object($modbusPlugin)) {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus plugin not found'
+                );
+            }
+
+            if ($modbusPlugin->isActive() != 1) {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus plugin not active'
+                );
+            }
+
+            if (!$modbusPlugin->getHasOwnDeamon()) {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus plugin has no daemon'
+                );
+            }
+
+            $daemonInfo = $modbusPlugin->deamon_info();
+
+            if ($daemonInfo['state'] != 'ok') {
+                return array(
+                    'stopped' => false,
+                    'wasRunning' => false,
+                    'reason' => 'Modbus daemon already stopped'
+                );
+            }
+
+            log::add('fidelixUpdater', 'info', "Stopping Modbus daemon for update (port: {$port})");
+            $modbusPlugin->deamon_stop();
+
+            sleep(2);
+
+            return array(
+                'stopped' => true,
+                'wasRunning' => true,
+                'pluginId' => 'modbus'
+            );
+
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to stop Modbus daemon: ' . $e->getMessage());
+            return array(
+                'stopped' => false,
+                'wasRunning' => false,
+                'reason' => 'Exception: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * Restart Modbus daemon if it was stopped by us
+     *
+     * @param array $stopStatus Result from stopModbusDaemonIfNeeded()
+     * @return bool Success of restart
+     */
+    public static function restartModbusDaemonIfNeeded($stopStatus) {
+        if (!isset($stopStatus['stopped']) || !$stopStatus['stopped']) {
+            return false;
+        }
+
+        if (!isset($stopStatus['wasRunning']) || !$stopStatus['wasRunning']) {
+            return false;
+        }
+
+        try {
+            $modbusPlugin = plugin::byId('modbus');
+
+            if (!is_object($modbusPlugin)) {
+                log::add('fidelixUpdater', 'debug', 'Modbus plugin not found, cannot restart daemon');
+                return false;
+            }
+
+            if ($modbusPlugin->isActive() != 1) {
+                log::add('fidelixUpdater', 'debug', 'Modbus plugin not active, cannot restart daemon');
+                return false;
+            }
+
+            log::add('fidelixUpdater', 'info', 'Restarting Modbus daemon after update');
+            $modbusPlugin->deamon_start(false, false);
+            return true;
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to restart Modbus daemon: ' . $e->getMessage());
+        }
+
+        return false;
     }
 
     /*     * *********************Méthodes d'instance************************* */
