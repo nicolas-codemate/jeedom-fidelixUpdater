@@ -39,7 +39,7 @@ if (!isConnect('admin')) {
                     </optgroup>
                     <optgroup label="Display Touchscreen">
                         <option value="displayfirmware">{{Firmware Display}} (.hex)</option>
-                        <option value="displaygraphics">{{Graphics Display}} (.bin)</option>
+                        <option value="displaygraphics">{{Graphics Display}} (.dat)</option>
                     </optgroup>
                 </select>
             </div>
@@ -49,12 +49,12 @@ if (!isConnect('admin')) {
                 <div class="input-group">
                     <span class="input-group-btn">
                         <span class="btn btn-default btn-file">
-                            <i class="fas fa-cloud-upload-alt"></i> {{Parcourir}}<input type="file" id="fileUpload" accept=".hex,.M24IEC,.bin" style="display: inline-block;">
+                            <i class="fas fa-cloud-upload-alt"></i> {{Parcourir}}<input type="file" id="fileUpload" accept="*" style="display: inline-block;">
                         </span>
                     </span>
                     <input type="text" class="form-control" id="fileNameDisplay" readonly placeholder="{{Aucun fichier sélectionné}}">
                 </div>
-                <small class="text-muted">{{Formats acceptés : .hex (firmware), .M24IEC (software). Taille max : 10Mo}}</small>
+                <small class="text-muted">{{Formats acceptés : .hex* (firmware), .M24IEC (software), .dat* (display). Taille max : 10Mo}}</small>
             </div>
 
             <div class="form-group">
@@ -157,6 +157,41 @@ $(function() {
     let statusFile = null;
     let pollingInterval = null;
 
+    // Helper function to show alert
+    function showAlert(message, level) {
+        // Use div_alert for temporary alerts with progress bar and auto-dismiss
+        // Force timeout even for danger/warning levels
+        $('#div_alert').showAlert({
+            message: message,
+            level: level,
+            timeout: 5000  // Force auto-dismiss after 5 seconds
+        });
+    }
+
+    // Helper function to extract error message from AJAX response
+    function extractErrorMessage(xhr, defaultMsg) {
+        // Try multiple paths to get the error message
+        if (xhr.responseJSON) {
+            if (xhr.responseJSON.result) {
+                return xhr.responseJSON.result;
+            }
+            if (xhr.responseJSON.message) {
+                return xhr.responseJSON.message;
+            }
+        }
+        if (xhr.responseText) {
+            try {
+                const json = JSON.parse(xhr.responseText);
+                if (json.result) return json.result;
+                if (json.message) return json.message;
+            } catch(e) {
+                // Not JSON, return raw text (truncated if too long)
+                return xhr.responseText.substring(0, 200);
+            }
+        }
+        return defaultMsg || 'Erreur inconnue';
+    }
+
     // File upload handler
     $('#fileUpload').on('change', function() {
         const file = this.files[0];
@@ -165,27 +200,7 @@ $(function() {
         }
 
         const filename = file.name;
-        const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
         const updateType = $('#updateType').val();
-
-        // Validate extension based on update type
-        if ((updateType === 'm24firmware' || updateType === 'displayfirmware') && extension !== '.hex') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .hex pour firmware}}', level: 'danger'});
-            $(this).val('');
-            return;
-        }
-
-        if (updateType === 'm24software' && extension !== '.m24iec') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .M24IEC pour software Multi24}}', level: 'danger'});
-            $(this).val('');
-            return;
-        }
-
-        if (updateType === 'displaygraphics' && extension !== '.bin') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .bin pour graphics Display}}', level: 'danger'});
-            $(this).val('');
-            return;
-        }
 
         // Display filename
         $('#fileNameDisplay').val(filename);
@@ -194,7 +209,15 @@ $(function() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const action = (updateType === 'm24firmware' || updateType === 'displayfirmware') ? 'uploadFirmware' : 'uploadSoftware';
+        // Determine which upload action to use based on update type
+        let action;
+        if (updateType === 'm24firmware' || updateType === 'displayfirmware') {
+            action = 'uploadFirmware';
+        } else if (updateType === 'm24software') {
+            action = 'uploadSoftware';
+        } else if (updateType === 'displaygraphics') {
+            action = 'uploadGraphics';
+        }
 
         $.ajax({
             url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php?action=' + action,
@@ -205,14 +228,50 @@ $(function() {
             dataType: 'json',
             success: function(data) {
                 if (data.state === 'ok') {
-                    uploadedFilename = data.result;
-                    $('#notify').showAlert({message: '{{Fichier uploadé avec succès}} : ' + uploadedFilename, level: 'success'});
+                    const uploadedFile = data.result;
+
+                    // Validate file extension with server
+                    $.ajax({
+                        type: 'POST',
+                        url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php',
+                        data: {
+                            action: 'validateFile',
+                            filename: uploadedFile,
+                            updateType: updateType
+                        },
+                        dataType: 'json',
+                        success: function(validationData) {
+                            if (validationData.state === 'ok') {
+                                uploadedFilename = uploadedFile;
+                                showAlert('{{Fichier uploadé et validé avec succès}} : ' + uploadedFile, 'success');
+                            } else {
+                                showAlert('{{Erreur validation}} : ' + validationData.result, 'warning');
+                                $('#fileUpload').val('');
+                                $('#fileNameDisplay').val('');
+                                uploadedFilename = null;
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            const errorMsg = extractErrorMessage(xhr, error);
+                            showAlert('{{Erreur validation}} : ' + errorMsg, 'warning');
+                            $('#fileUpload').val('');
+                            $('#fileNameDisplay').val('');
+                            uploadedFilename = null;
+                        }
+                    });
                 } else {
-                    $('#notify').showAlert({message: '{{Erreur upload}} : ' + data.result, level: 'danger'});
+                    showAlert('{{Erreur upload}} : ' + data.result, 'warning');
+                    $('#fileUpload').val('');
+                    $('#fileNameDisplay').val('');
+                    uploadedFilename = null;
                 }
             },
             error: function(xhr, status, error) {
-                $('#notify').showAlert({message: '{{Erreur upload}} : ' + error, level: 'danger'});
+                const errorMsg = extractErrorMessage(xhr, error);
+                showAlert('{{Erreur upload}} : ' + errorMsg, 'warning');
+                $('#fileUpload').val('');
+                $('#fileNameDisplay').val('');
+                uploadedFilename = null;
             }
         });
     });
@@ -220,12 +279,14 @@ $(function() {
     // Update type change handler
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
+        // Note: Accept attribute is permissive (*) to support variable extensions like .hex-XXXX or .dat-XXXX
+        // Validation is done server-side after upload
         if (updateType === 'm24firmware' || updateType === 'displayfirmware') {
-            $('#fileUpload').attr('accept', '.hex');
+            $('#fileUpload').attr('accept', '*');
         } else if (updateType === 'm24software') {
-            $('#fileUpload').attr('accept', '.M24IEC,.m24iec');
+            $('#fileUpload').attr('accept', '*');
         } else if (updateType === 'displaygraphics') {
-            $('#fileUpload').attr('accept', '.bin,.BIN');
+            $('#fileUpload').attr('accept', '*');
         }
         // Reset upload
         $('#fileUpload').val('');
@@ -237,25 +298,25 @@ $(function() {
     $('#btnStartUpdate').on('click', function() {
         // Validate inputs
         if (!uploadedFilename) {
-            $('#notify').showAlert({message: '{{Veuillez d\'abord uploader un fichier}}', level: 'warning'});
+            showAlert('{{Veuillez d\'abord uploader un fichier}}', 'warning');
             return;
         }
 
         const address = parseInt($('#deviceAddress').val());
         if (!address || address < 1 || address > 247) {
-            $('#notify').showAlert({message: '{{Adresse invalide (doit être entre 1 et 247)}}', level: 'warning'});
+            showAlert('{{Adresse invalide (doit être entre 1 et 247)}}', 'warning');
             return;
         }
 
         const subaddress = $('#deviceSubaddress').val() ? parseInt($('#deviceSubaddress').val()) : null;
         if (subaddress !== null && (subaddress < 1 || subaddress > 247)) {
-            $('#notify').showAlert({message: '{{Sous-adresse invalide (doit être entre 1 et 247)}}', level: 'warning'});
+            showAlert('{{Sous-adresse invalide (doit être entre 1 et 247)}}', 'warning');
             return;
         }
 
         const port = $('#serialPort').val();
         if (!port) {
-            $('#notify').showAlert({message: '{{Veuillez sélectionner un port série}}', level: 'warning'});
+            showAlert('{{Veuillez sélectionner un port série}}', 'warning');
             return;
         }
 
@@ -298,12 +359,13 @@ $(function() {
                     // Start polling
                     startPolling();
                 } else {
-                    $('#notify').showAlert({message: '{{Erreur démarrage}} : ' + data.result, level: 'danger'});
+                    showAlert('{{Erreur démarrage}} : ' + data.result, 'danger');
                     $('#btnStartUpdate').prop('disabled', false).html('<i class="fas fa-play"></i> {{Démarrer la mise à jour}}');
                 }
             },
             error: function(xhr, status, error) {
-                $('#notify').showAlert({message: '{{Erreur démarrage}} : ' + error, level: 'danger'});
+                const errorMsg = extractErrorMessage(xhr, error);
+                showAlert('{{Erreur démarrage}} : ' + errorMsg, 'danger');
                 $('#btnStartUpdate').prop('disabled', false).html('<i class="fas fa-play"></i> {{Démarrer la mise à jour}}');
             }
         });

@@ -26,7 +26,7 @@ try {
     // Load helper class
     require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'uploadGraphics', 'validateFile', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -47,9 +47,9 @@ try {
             throw new Exception(__('Aucun fichier trouvé. Vérifiez le paramètre PHP (post size limit)', __FILE__));
         }
 
-        $extension = strtolower(strrchr($_FILES['file']['name'], '.'));
-        if (!in_array($extension, array('.hex'))) {
-            throw new Exception('Extension du fichier non valide (autorisé .hex) : ' . $extension);
+        $filename = strtolower($_FILES['file']['name']);
+        if (!preg_match('/\.hex[^.]*$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé .hex, .hexXXXX, .hex-XXXX)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -88,9 +88,9 @@ try {
             throw new Exception(__('Aucun fichier trouvé. Vérifiez le paramètre PHP (post size limit)', __FILE__));
         }
 
-        $extension = strtolower(strrchr($_FILES['file']['name'], '.'));
-        if (!in_array($extension, array('.m24iec', '.bin'))) {
-            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .bin) : ' . $extension);
+        $filename = strtolower($_FILES['file']['name']);
+        if (!preg_match('/\.m24iec$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé uniquement .M24IEC)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -108,6 +108,88 @@ try {
 
         log::add('fidelixUpdater', 'debug', 'Software uploadé : ' . $filename);
         ajax::success($filename);
+    }
+
+    // ========================================
+    // ACTION: uploadGraphics
+    // ========================================
+    if (init('action') == 'uploadGraphics') {
+        log::add('fidelixUpdater', 'debug', 'Upload graphics demandé');
+
+        // Use helper to ensure directory exists with proper error handling
+        try {
+            $uploaddir = fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('filetransfer'));
+            log::add('fidelixUpdater', 'debug', 'Upload directory resolved to: ' . $uploaddir);
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to create upload directory: ' . $e->getMessage());
+            throw new Exception(__('Impossible de créer le répertoire de téléversement : ', __FILE__) . $e->getMessage());
+        }
+
+        if (!isset($_FILES['file'])) {
+            throw new Exception(__('Aucun fichier trouvé. Vérifiez le paramètre PHP (post size limit)', __FILE__));
+        }
+
+        $filename = strtolower($_FILES['file']['name']);
+        if (!preg_match('/\.dat[^.]*$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé uniquement .dat ou .datXXXX)');
+        }
+
+        if (filesize($_FILES['file']['tmp_name']) > 10000000) {
+            throw new Exception(__('Le fichier est trop gros (maximum 10Mo)', __FILE__));
+        }
+
+        $filename = basename($_FILES['file']['name']);
+        $filepath = $uploaddir . '/' . $filename;
+
+        if (file_exists($filepath)) {
+            @unlink($filepath);
+        }
+
+        file_put_contents($filepath, file_get_contents($_FILES['file']['tmp_name']));
+
+        log::add('fidelixUpdater', 'debug', 'Graphics uploadé : ' . $filename);
+        ajax::success($filename);
+    }
+
+    // ========================================
+    // ACTION: validateFile
+    // ========================================
+    if (init('action') == 'validateFile') {
+        $filename = init('filename');
+        $updateType = init('updateType');
+
+        if (empty($filename)) {
+            throw new Exception('Nom de fichier non spécifié');
+        }
+
+        if (empty($updateType)) {
+            throw new Exception('Type de mise à jour non spécifié');
+        }
+
+        $filenameLower = strtolower($filename);
+
+        // Validate extension based on update type
+        if ($updateType === 'm24firmware' || $updateType === 'displayfirmware') {
+            // Must start with .hex (anything after is OK: .hex, .hex0281, .hex-0281, etc.)
+            if (!preg_match('/\.hex[^.]*$/i', $filenameLower)) {
+                throw new Exception('Extension invalide pour le firmware. Attendu: .hex, .hexXXXX ou .hex-XXXX (exemple: .hex-0281)');
+            }
+        } elseif ($updateType === 'm24software') {
+            // Must be exactly .m24iec (case insensitive)
+            if (!preg_match('/\.m24iec$/i', $filenameLower)) {
+                throw new Exception('Extension invalide pour le software. Attendu: .M24IEC');
+            }
+        } elseif ($updateType === 'displaygraphics') {
+            // Must start with .dat (anything after is OK: .dat, .datECRAN10, .dat-ECRAN10, etc.)
+            if (!preg_match('/\.dat[^.]*$/i', $filenameLower)) {
+                throw new Exception('Extension invalide pour le display. Attendu: .dat, .datXXXX ou .dat-XXXX (exemple: .dat-ECRAN10)');
+            }
+        } else {
+            throw new Exception('Type de mise à jour inconnu : ' . $updateType);
+        }
+
+        log::add('fidelixUpdater', 'debug', 'Validation réussie pour ' . $filename . ' (type: ' . $updateType . ')');
+        ajax::success(array('valid' => true, 'message' => 'Fichier valide'));
     }
 
     // ========================================
