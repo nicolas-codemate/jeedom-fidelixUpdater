@@ -54,7 +54,7 @@ if (!isConnect('admin')) {
                     </span>
                     <input type="text" class="form-control" id="fileNameDisplay" readonly placeholder="{{Aucun fichier sélectionné}}">
                 </div>
-                <small class="text-muted">{{Formats acceptés : .hex / .hex-XXXX (firmware), .M24IEC (software), .dat / .dat-XXXX (display). Taille max : 10Mo}}</small>
+                <small class="text-muted">{{Formats acceptés : .hex* (firmware), .M24IEC (software), .dat* (display). Taille max : 10Mo}}</small>
             </div>
 
             <div class="form-group">

@@ -48,8 +48,8 @@ try {
         }
 
         $filename = strtolower($_FILES['file']['name']);
-        if (!preg_match('/\.hex(-.*)?$/', $filename)) {
-            throw new Exception('Extension du fichier non valide (autorisé .hex ou .hex-XXXX)');
+        if (!preg_match('/\.hex[^.]*$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé .hex, .hexXXXX, .hex-XXXX)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -89,8 +89,8 @@ try {
         }
 
         $filename = strtolower($_FILES['file']['name']);
-        if (!preg_match('/\.(m24iec|dat(-.*)?$)/', $filename)) {
-            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .dat-XXXX)');
+        if (!preg_match('/\.(m24iec|dat[^.]*)$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .datXXXX)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -129,19 +129,19 @@ try {
 
         // Validate extension based on update type
         if ($updateType === 'm24firmware' || $updateType === 'displayfirmware') {
-            // Must be .hex or .hex-XXXX
-            if (!preg_match('/\.hex(-.*)?$/', $filenameLower)) {
-                throw new Exception('Extension invalide pour le firmware. Attendu: .hex ou .hex-XXXX (exemple: .hex-0281)');
+            // Must start with .hex (anything after is OK: .hex, .hex0281, .hex-0281, etc.)
+            if (!preg_match('/\.hex[^.]*$/i', $filenameLower)) {
+                throw new Exception('Extension invalide pour le firmware. Attendu: .hex, .hexXXXX ou .hex-XXXX (exemple: .hex-0281)');
             }
         } elseif ($updateType === 'm24software') {
-            // Must be .m24iec (case insensitive)
-            if (!preg_match('/\.m24iec$/', $filenameLower)) {
+            // Must be exactly .m24iec (case insensitive)
+            if (!preg_match('/\.m24iec$/i', $filenameLower)) {
                 throw new Exception('Extension invalide pour le software. Attendu: .M24IEC');
             }
         } elseif ($updateType === 'displaygraphics') {
-            // Must be .dat or .dat-XXXX
-            if (!preg_match('/\.dat(-.*)?$/', $filenameLower)) {
-                throw new Exception('Extension invalide pour le display. Attendu: .dat ou .dat-XXXX (exemple: .dat-ECRAN10)');
+            // Must start with .dat (anything after is OK: .dat, .datECRAN10, .dat-ECRAN10, etc.)
+            if (!preg_match('/\.dat[^.]*$/i', $filenameLower)) {
+                throw new Exception('Extension invalide pour le display. Attendu: .dat, .datXXXX ou .dat-XXXX (exemple: .dat-ECRAN10)');
             }
         } else {
             throw new Exception('Type de mise à jour inconnu : ' . $updateType);
