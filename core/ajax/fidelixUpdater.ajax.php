@@ -26,7 +26,7 @@ try {
     // Load helper class
     require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'validateFile', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -47,9 +47,9 @@ try {
             throw new Exception(__('Aucun fichier trouvé. Vérifiez le paramètre PHP (post size limit)', __FILE__));
         }
 
-        $extension = strtolower(strrchr($_FILES['file']['name'], '.'));
-        if (!in_array($extension, array('.hex'))) {
-            throw new Exception('Extension du fichier non valide (autorisé .hex) : ' . $extension);
+        $filename = strtolower($_FILES['file']['name']);
+        if (!preg_match('/\.hex(-.*)?$/', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé .hex ou .hex-XXXX)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -88,9 +88,9 @@ try {
             throw new Exception(__('Aucun fichier trouvé. Vérifiez le paramètre PHP (post size limit)', __FILE__));
         }
 
-        $extension = strtolower(strrchr($_FILES['file']['name'], '.'));
-        if (!in_array($extension, array('.m24iec', '.bin'))) {
-            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .bin) : ' . $extension);
+        $filename = strtolower($_FILES['file']['name']);
+        if (!preg_match('/\.(m24iec|dat(-.*)?$)/', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .dat-XXXX)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -108,6 +108,47 @@ try {
 
         log::add('fidelixUpdater', 'debug', 'Software uploadé : ' . $filename);
         ajax::success($filename);
+    }
+
+    // ========================================
+    // ACTION: validateFile
+    // ========================================
+    if (init('action') == 'validateFile') {
+        $filename = init('filename');
+        $updateType = init('updateType');
+
+        if (empty($filename)) {
+            throw new Exception('Nom de fichier non spécifié');
+        }
+
+        if (empty($updateType)) {
+            throw new Exception('Type de mise à jour non spécifié');
+        }
+
+        $filenameLower = strtolower($filename);
+
+        // Validate extension based on update type
+        if ($updateType === 'm24firmware' || $updateType === 'displayfirmware') {
+            // Must be .hex or .hex-XXXX
+            if (!preg_match('/\.hex(-.*)?$/', $filenameLower)) {
+                throw new Exception('Extension invalide pour le firmware. Attendu: .hex ou .hex-XXXX (exemple: .hex-0281)');
+            }
+        } elseif ($updateType === 'm24software') {
+            // Must be .m24iec (case insensitive)
+            if (!preg_match('/\.m24iec$/', $filenameLower)) {
+                throw new Exception('Extension invalide pour le software. Attendu: .M24IEC');
+            }
+        } elseif ($updateType === 'displaygraphics') {
+            // Must be .dat or .dat-XXXX
+            if (!preg_match('/\.dat(-.*)?$/', $filenameLower)) {
+                throw new Exception('Extension invalide pour le display. Attendu: .dat ou .dat-XXXX (exemple: .dat-ECRAN10)');
+            }
+        } else {
+            throw new Exception('Type de mise à jour inconnu : ' . $updateType);
+        }
+
+        log::add('fidelixUpdater', 'debug', 'Validation réussie pour ' . $filename . ' (type: ' . $updateType . ')');
+        ajax::success(array('valid' => true, 'message' => 'Fichier valide'));
     }
 
     // ========================================

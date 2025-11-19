@@ -39,7 +39,7 @@ if (!isConnect('admin')) {
                     </optgroup>
                     <optgroup label="Display Touchscreen">
                         <option value="displayfirmware">{{Firmware Display}} (.hex)</option>
-                        <option value="displaygraphics">{{Graphics Display}} (.bin)</option>
+                        <option value="displaygraphics">{{Graphics Display}} (.dat)</option>
                     </optgroup>
                 </select>
             </div>
@@ -49,12 +49,12 @@ if (!isConnect('admin')) {
                 <div class="input-group">
                     <span class="input-group-btn">
                         <span class="btn btn-default btn-file">
-                            <i class="fas fa-cloud-upload-alt"></i> {{Parcourir}}<input type="file" id="fileUpload" accept=".hex,.M24IEC,.bin" style="display: inline-block;">
+                            <i class="fas fa-cloud-upload-alt"></i> {{Parcourir}}<input type="file" id="fileUpload" accept="*" style="display: inline-block;">
                         </span>
                     </span>
                     <input type="text" class="form-control" id="fileNameDisplay" readonly placeholder="{{Aucun fichier sélectionné}}">
                 </div>
-                <small class="text-muted">{{Formats acceptés : .hex (firmware), .M24IEC (software). Taille max : 10Mo}}</small>
+                <small class="text-muted">{{Formats acceptés : .hex / .hex-XXXX (firmware), .M24IEC (software), .dat / .dat-XXXX (display). Taille max : 10Mo}}</small>
             </div>
 
             <div class="form-group">
@@ -165,27 +165,7 @@ $(function() {
         }
 
         const filename = file.name;
-        const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'));
         const updateType = $('#updateType').val();
-
-        // Validate extension based on update type
-        if ((updateType === 'm24firmware' || updateType === 'displayfirmware') && extension !== '.hex') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .hex pour firmware}}', level: 'danger'});
-            $(this).val('');
-            return;
-        }
-
-        if (updateType === 'm24software' && extension !== '.m24iec') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .M24IEC pour software Multi24}}', level: 'danger'});
-            $(this).val('');
-            return;
-        }
-
-        if (updateType === 'displaygraphics' && extension !== '.bin') {
-            $('#notify').showAlert({message: '{{Fichier invalide : sélectionnez un fichier .bin pour graphics Display}}', level: 'danger'});
-            $(this).val('');
-            return;
-        }
 
         // Display filename
         $('#fileNameDisplay').val(filename);
@@ -205,14 +185,44 @@ $(function() {
             dataType: 'json',
             success: function(data) {
                 if (data.state === 'ok') {
-                    uploadedFilename = data.result;
-                    $('#notify').showAlert({message: '{{Fichier uploadé avec succès}} : ' + uploadedFilename, level: 'success'});
+                    const uploadedFile = data.result;
+
+                    // Validate file extension with server
+                    $.ajax({
+                        type: 'POST',
+                        url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php',
+                        data: {
+                            action: 'validateFile',
+                            filename: uploadedFile,
+                            updateType: updateType
+                        },
+                        dataType: 'json',
+                        success: function(validationData) {
+                            if (validationData.state === 'ok') {
+                                uploadedFilename = uploadedFile;
+                                $('#notify').showAlert({message: '{{Fichier uploadé et validé avec succès}} : ' + uploadedFile, level: 'success'});
+                            } else {
+                                $('#notify').showAlert({message: '{{Erreur validation}} : ' + validationData.result, level: 'danger'});
+                                $('#fileUpload').val('');
+                                $('#fileNameDisplay').val('');
+                                uploadedFilename = null;
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            const errorMsg = xhr.responseJSON && xhr.responseJSON.result ? xhr.responseJSON.result : error;
+                            $('#notify').showAlert({message: '{{Erreur validation}} : ' + errorMsg, level: 'danger'});
+                            $('#fileUpload').val('');
+                            $('#fileNameDisplay').val('');
+                            uploadedFilename = null;
+                        }
+                    });
                 } else {
                     $('#notify').showAlert({message: '{{Erreur upload}} : ' + data.result, level: 'danger'});
                 }
             },
             error: function(xhr, status, error) {
-                $('#notify').showAlert({message: '{{Erreur upload}} : ' + error, level: 'danger'});
+                const errorMsg = xhr.responseJSON && xhr.responseJSON.result ? xhr.responseJSON.result : error;
+                $('#notify').showAlert({message: '{{Erreur upload}} : ' + errorMsg, level: 'danger'});
             }
         });
     });
@@ -220,12 +230,14 @@ $(function() {
     // Update type change handler
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
+        // Note: Accept attribute is permissive (*) to support variable extensions like .hex-XXXX or .dat-XXXX
+        // Validation is done server-side after upload
         if (updateType === 'm24firmware' || updateType === 'displayfirmware') {
-            $('#fileUpload').attr('accept', '.hex');
+            $('#fileUpload').attr('accept', '*');
         } else if (updateType === 'm24software') {
-            $('#fileUpload').attr('accept', '.M24IEC,.m24iec');
+            $('#fileUpload').attr('accept', '*');
         } else if (updateType === 'displaygraphics') {
-            $('#fileUpload').attr('accept', '.bin,.BIN');
+            $('#fileUpload').attr('accept', '*');
         }
         // Reset upload
         $('#fileUpload').val('');
