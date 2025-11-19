@@ -26,7 +26,7 @@ try {
     // Load helper class
     require_once dirname(__FILE__) . '/../class/fidelixUpdaterHelper.class.php';
 
-    ajax::init(['uploadFirmware', 'uploadSoftware', 'validateFile', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
+    ajax::init(['uploadFirmware', 'uploadSoftware', 'uploadGraphics', 'validateFile', 'startUpdate', 'getStatus', 'cleanupUpdate', 'getProcesses', 'killProcess', 'testConnection', 'fixPermissions', 'getLogs']);
 
     // ========================================
     // ACTION: uploadFirmware
@@ -89,8 +89,8 @@ try {
         }
 
         $filename = strtolower($_FILES['file']['name']);
-        if (!preg_match('/\.(m24iec|dat[^.]*)$/i', $filename)) {
-            throw new Exception('Extension du fichier non valide (autorisé .M24IEC ou .datXXXX)');
+        if (!preg_match('/\.m24iec$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé uniquement .M24IEC)');
         }
 
         if (filesize($_FILES['file']['tmp_name']) > 10000000) {
@@ -107,6 +107,47 @@ try {
         file_put_contents($filepath, file_get_contents($_FILES['file']['tmp_name']));
 
         log::add('fidelixUpdater', 'debug', 'Software uploadé : ' . $filename);
+        ajax::success($filename);
+    }
+
+    // ========================================
+    // ACTION: uploadGraphics
+    // ========================================
+    if (init('action') == 'uploadGraphics') {
+        log::add('fidelixUpdater', 'debug', 'Upload graphics demandé');
+
+        // Use helper to ensure directory exists with proper error handling
+        try {
+            $uploaddir = fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('filetransfer'));
+            log::add('fidelixUpdater', 'debug', 'Upload directory resolved to: ' . $uploaddir);
+        } catch (Exception $e) {
+            log::add('fidelixUpdater', 'error', 'Failed to create upload directory: ' . $e->getMessage());
+            throw new Exception(__('Impossible de créer le répertoire de téléversement : ', __FILE__) . $e->getMessage());
+        }
+
+        if (!isset($_FILES['file'])) {
+            throw new Exception(__('Aucun fichier trouvé. Vérifiez le paramètre PHP (post size limit)', __FILE__));
+        }
+
+        $filename = strtolower($_FILES['file']['name']);
+        if (!preg_match('/\.dat[^.]*$/i', $filename)) {
+            throw new Exception('Extension du fichier non valide (autorisé uniquement .dat ou .datXXXX)');
+        }
+
+        if (filesize($_FILES['file']['tmp_name']) > 10000000) {
+            throw new Exception(__('Le fichier est trop gros (maximum 10Mo)', __FILE__));
+        }
+
+        $filename = basename($_FILES['file']['name']);
+        $filepath = $uploaddir . '/' . $filename;
+
+        if (file_exists($filepath)) {
+            @unlink($filepath);
+        }
+
+        file_put_contents($filepath, file_get_contents($_FILES['file']['tmp_name']));
+
+        log::add('fidelixUpdater', 'debug', 'Graphics uploadé : ' . $filename);
         ajax::success($filename);
     }
 

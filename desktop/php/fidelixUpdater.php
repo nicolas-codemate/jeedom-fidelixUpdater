@@ -65,12 +65,14 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
         <div class="alert alert-info" style="padding: 20px;">
             <h4>{{Plugin Fidelix Updater}}</h4>
-            <p>{{Ce plugin permet de mettre à jour le firmware et le software des modules Fidelix Multi24 via Modbus RTU.}}</p>
+            <p>{{Ce plugin permet de mettre à jour le firmware et le software des modules Fidelix Multi24 ainsi que les écrans tactiles Display via Modbus RTU.}}</p>
 
             <h5><i class="fas fa-cog"></i> {{Fonctionnalités}}</h5>
             <ul>
-                <li>{{Mise à jour firmware (fichier .hex)}}</li>
-                <li>{{Mise à jour software (fichier .M24IEC)}}</li>
+                <li>{{Mise à jour firmware Multi24 (fichier .hex*)}}</li>
+                <li>{{Mise à jour software Multi24 (fichier .M24IEC)}}</li>
+                <li>{{Mise à jour firmware Display (fichier .hex*)}}</li>
+                <li>{{Mise à jour graphics Display (fichier .dat*)}}</li>
                 <li>{{Suivi de progression en temps réel}}</li>
                 <li>{{Mécanisme de récupération automatique en cas d'échec}}</li>
                 <li>{{Support Modbus RTU sur RS485 (vitesse configurable : 9600-115200 bauds)}}</li>
@@ -151,7 +153,16 @@ function updateActiveProcessesTable(processes) {
         }
 
         var portShort = process.port.split('/').pop();
-        var typeLabel = process.type === 'm24firmware' ? 'Firmware' : 'Software';
+        var typeLabel = 'Software';
+        if (process.type === 'm24firmware') {
+            typeLabel = 'FW Multi24';
+        } else if (process.type === 'm24software') {
+            typeLabel = 'SW Multi24';
+        } else if (process.type === 'displayfirmware') {
+            typeLabel = 'FW Display';
+        } else if (process.type === 'displaygraphics') {
+            typeLabel = 'GFX Display';
+        }
         var addressLabel = process.address;
         if (process.subaddress) {
             addressLabel += ' → ' + process.subaddress;
