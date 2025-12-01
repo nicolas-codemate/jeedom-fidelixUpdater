@@ -101,13 +101,31 @@ function fidelixUpdater_install() {
         log::add('fidelixUpdater', 'warning', 'Permissions script not found at: ' . $fixScript);
     }
 
-    // Enregistrer le plugin dans la table update de Jeedom
+    // Synchronize plugin version with Jeedom update system
     try {
-        log::add('fidelixUpdater', 'info', 'Registering plugin in Jeedom update system...');
-        update::findNewUpdateObject();
-        log::add('fidelixUpdater', 'info', 'Plugin registered successfully');
+        log::add('fidelixUpdater', 'info', 'Synchronizing plugin version with Jeedom...');
+
+        // Read version from info.json
+        $infoJsonPath = dirname(__FILE__) . '/info.json';
+        $info = json_decode(file_get_contents($infoJsonPath), true);
+        $pluginVersion = $info['pluginVersion'] ?? '1.0.0';
+
+        // Get or create update object
+        $update = update::byLogicalId('fidelixUpdater');
+        if (!is_object($update)) {
+            update::findNewUpdateObject();
+            $update = update::byLogicalId('fidelixUpdater');
+        }
+
+        // Set the local version from info.json
+        if (is_object($update)) {
+            $update->setLocalVersion($pluginVersion);
+            $update->setSource('file');
+            $update->save();
+            log::add('fidelixUpdater', 'info', 'Plugin version synchronized: ' . $pluginVersion);
+        }
     } catch (Exception $e) {
-        log::add('fidelixUpdater', 'error', 'Failed to register plugin: ' . $e->getMessage());
+        log::add('fidelixUpdater', 'error', 'Failed to synchronize version: ' . $e->getMessage());
     }
 
     log::add('fidelixUpdater', 'info', 'Plugin installation completed');
