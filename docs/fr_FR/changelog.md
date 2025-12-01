@@ -1,5 +1,9 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.7 - 2025-12-01
+
+- Synchronisation automatique de la version du plugin avec Jeedom (affichage natif dans l'interface)
+
 ## Version 1.0.6 - 2025-11-15
 
 - ✨ Contrôle automatique du daemon Modbus : arrêt/redémarrage pendant les mises à jour pour éviter les conflits série
