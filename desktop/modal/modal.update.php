@@ -38,7 +38,7 @@ if (!isConnect('admin')) {
                         <option value="m24software" selected>{{Software Multi24}} (.M24IEC)</option>
                     </optgroup>
                     <optgroup label="Display Touchscreen">
-                        <option value="displayfirmware">{{Firmware Display}} (.hex)</option>
+                        <option value="displayfirmware" disabled>{{Firmware Display}} (.hex) - {{Indisponible}}</option>
                         <option value="displaygraphics">{{Graphics Display}} (.dat)</option>
                     </optgroup>
                 </select>
@@ -109,6 +109,11 @@ if (!isConnect('admin')) {
         </div>
 
         <div class="col-lg-6">
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>{{Firmware Display}}</strong> : {{La mise à jour du firmware Display est temporairement indisponible suite à des problèmes de compatibilité identifiés. Cette fonctionnalité sera réactivée dans une prochaine version.}}
+            </div>
+
             <div class="alert alert-info">
                 <h4><i class="fas fa-info-circle"></i> {{Informations}}</h4>
                 <ul>
