@@ -229,6 +229,12 @@ $allOk = $diagnostics['nodejs']['installed'] &&
 
             <hr>
 
+            <!-- Display Firmware Warning -->
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>{{Firmware Display}}</strong> : {{La mise à jour du firmware Display est temporairement indisponible suite à des problèmes de compatibilité identifiés. Cette fonctionnalité sera réactivée dans une prochaine version.}}
+            </div>
+
             <!-- Information -->
             <div class="alert alert-info">
                 <h4><i class="fas fa-info-circle"></i> {{Informations}}</h4>

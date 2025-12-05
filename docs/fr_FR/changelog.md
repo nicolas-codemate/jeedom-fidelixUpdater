@@ -1,5 +1,9 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.8 - 2025-12-05
+
+- Desactivation temporaire de la mise a jour du firmware Display suite a des problemes de compatibilite
+
 ## Version 1.0.7 - 2025-12-01
 
 - Synchronisation automatique de la version du plugin avec Jeedom (affichage natif dans l'interface)
