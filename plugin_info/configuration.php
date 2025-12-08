@@ -31,9 +31,12 @@ $diagnostics = fidelixUpdaterHelper::getSystemDiagnostics();
 $serialPorts = $diagnostics['serial']['ports'];
 
 // Read plugin version from info.json
+$pluginVersion = 'Inconnue';
 $infoJsonPath = dirname(__FILE__) . '/info.json';
-$pluginInfo = json_decode(file_get_contents($infoJsonPath), true);
-$pluginVersion = $pluginInfo['pluginVersion'] ?? 'Inconnue';
+if (file_exists($infoJsonPath)) {
+    $pluginInfo = json_decode(file_get_contents($infoJsonPath), true);
+    $pluginVersion = $pluginInfo['pluginVersion'] ?? 'Inconnue';
+}
 
 // Check if Modbus plugin is installed and enabled
 $modbusInstalled = false;
