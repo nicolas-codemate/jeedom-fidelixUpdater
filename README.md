@@ -2,6 +2,7 @@
 
 Plugin Jeedom pour mettre à jour le firmware et le software des modules **Fidelix Multi24** via Modbus RTU.
 
+[![Version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnicolas-codemate%2Fjeedom-fidelixUpdater%2Fmain%2Fplugin_info%2Finfo.json&query=%24.pluginVersion&label=Version&color=blueviolet)](https://github.com/nicolas-codemate/jeedom-fidelixUpdater/releases)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Jeedom](https://img.shields.io/badge/Jeedom-4.2%2B-green)](https://www.jeedom.com)
 
