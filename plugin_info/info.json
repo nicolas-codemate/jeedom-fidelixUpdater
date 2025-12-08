@@ -1,7 +1,7 @@
 {
 	"id": "fidelixUpdater",
 	"name": "Fidelix Updater",
-	"pluginVersion": "1.0.8",
+	"pluginVersion": "1.0.9",
 	"description": {
 		"fr_FR": "Plugin pour mettre à jour le firmware et software des modules Fidelix Multi24 et Display via Modbus RTU",
 		"en_US": "Plugin to update firmware and software of Fidelix Multi24 and Display modules via Modbus RTU"

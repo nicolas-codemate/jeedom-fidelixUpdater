@@ -30,6 +30,11 @@ require_once dirname(__FILE__) . '/../core/class/fidelixUpdaterHelper.class.php'
 $diagnostics = fidelixUpdaterHelper::getSystemDiagnostics();
 $serialPorts = $diagnostics['serial']['ports'];
 
+// Read plugin version from info.json
+$infoJsonPath = dirname(__FILE__) . '/info.json';
+$pluginInfo = json_decode(file_get_contents($infoJsonPath), true);
+$pluginVersion = $pluginInfo['pluginVersion'] ?? 'Inconnue';
+
 // Check if Modbus plugin is installed and enabled
 $modbusInstalled = false;
 try {
@@ -83,6 +88,18 @@ $allOk = $diagnostics['nodejs']['installed'] &&
 
 <form class="form-horizontal">
     <fieldset>
+        <!-- Plugin Version Info -->
+        <div class="row">
+            <div class="col-md-12" style="margin-bottom: 15px;">
+                <div class="diagnostic-item success">
+                    <span class="diagnostic-icon">
+                        <i class="fas fa-code-branch" style="color: #3c763d;"></i>
+                    </span>
+                    <strong>{{Version du plugin}} :</strong> <code style="font-size: 14px;"><?php echo htmlspecialchars($pluginVersion); ?></code>
+                </div>
+            </div>
+        </div>
+
         <div class="row">
             <?php if ($modbusInstalled): ?>
             <!-- Configuration Column -->

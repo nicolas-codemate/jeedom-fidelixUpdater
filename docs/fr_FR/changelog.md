@@ -1,5 +1,10 @@
 # Changelog - Fidelix Updater
 
+## Version 1.0.9 - 2025-12-08
+
+- Affichage de la version du plugin directement dans la page de configuration (lecture depuis info.json)
+- Suppression de la synchronisation de version inutile dans install.php
+
 ## Version 1.0.8 - 2025-12-05
 
 - Desactivation temporaire de la mise a jour du firmware Display suite a des problemes de compatibilite
