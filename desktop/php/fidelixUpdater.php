@@ -46,7 +46,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <table class="table table-condensed table-striped">
                     <thead>
                         <tr>
-                            <th style="width:150px">{{Port}}</th>
+                            <th style="width:150px">{{Connexion}}</th>
                             <th style="width:100px">{{Type}}</th>
                             <th style="width:100px">{{Utilisateur}}</th>
                             <th style="width:80px">{{Adresse}}</th>
@@ -65,7 +65,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
 
         <div class="alert alert-info" style="padding: 20px;">
             <h4>{{Plugin Fidelix Updater}}</h4>
-            <p>{{Ce plugin permet de mettre à jour le firmware et le software des modules Fidelix Multi24 ainsi que les écrans tactiles Display via Modbus RTU.}}</p>
+            <p>{{Ce plugin permet de mettre à jour le firmware et le software des modules Fidelix Multi24 ainsi que les écrans tactiles Display via Modbus RTU ou TCP.}}</p>
 
             <h5><i class="fas fa-cog"></i> {{Fonctionnalités}}</h5>
             <ul>
@@ -76,6 +76,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 <li>{{Suivi de progression en temps réel}}</li>
                 <li>{{Mécanisme de récupération automatique en cas d'échec}}</li>
                 <li>{{Support Modbus RTU sur RS485 (vitesse configurable : 9600-115200 bauds)}}</li>
+                <li>{{Support Modbus TCP via convertisseur Ethernet}}</li>
             </ul>
         </div>
     </div>
@@ -152,7 +153,14 @@ function updateActiveProcessesTable(processes) {
             progressClass = 'danger';
         }
 
-        var portShort = process.port.split('/').pop();
+        // Display connection info based on type
+        var connectionInfo = '';
+        if (process.connectionType === 'tcp') {
+            connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' + process.tcpHost + ':' + process.tcpPort;
+        } else {
+            var portShort = process.port ? process.port.split('/').pop() : '-';
+            connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' + portShort;
+        }
         var typeLabel = 'Software';
         if (process.type === 'm24firmware') {
             typeLabel = 'FW Multi24';
@@ -191,13 +199,14 @@ function updateActiveProcessesTable(processes) {
         if (existingRows[process.updateId]) {
             // Update existing row
             var $row = existingRows[process.updateId];
+            $row.find('td:eq(0)').html(connectionInfo);
             $row.find('td:eq(4)').html(process.phase + statusBadge);
             $row.find('td:eq(5)').html(progressBar);
             $row.find('td:eq(6)').html(startTime);
         } else {
             // Create new row
             var row = '<tr data-update-id="' + process.updateId + '">' +
-                '<td>' + portShort + '</td>' +
+                '<td>' + connectionInfo + '</td>' +
                 '<td>' + typeLabel + '</td>' +
                 '<td>' + (process.username || '-') + '</td>' +
                 '<td>' + addressLabel + '</td>' +

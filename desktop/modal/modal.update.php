@@ -70,29 +70,55 @@ if (!isConnect('admin')) {
             </div>
 
             <div class="form-group">
-                <label>{{Port série}}</label>
-                <select class="form-control" id="serialPort">
-                    <?php
-                    $usbMapping = jeedom::getUsbMapping('', true);
-                    if (is_array($usbMapping)) {
-                        foreach ($usbMapping as $key => $value) {
-                            echo '<option value="' . $value . '">' . $key . ' (' . $value . ')</option>';
-                        }
-                    }
-                    ?>
+                <label>{{Type de connexion}}</label>
+                <select class="form-control" id="connectionType">
+                    <option value="rtu">{{Série RTU}} (USB/RS485)</option>
+                    <option value="tcp">{{TCP/IP}} (Ethernet/Waveshare)</option>
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>{{Vitesse de communication (Baud Rate)}}</label>
-                <select class="form-control" id="baudRate">
-                    <option value="9600">9600</option>
-                    <option value="19200">19200</option>
-                    <option value="38400" selected>38400</option>
-                    <option value="57600">57600</option>
-                    <option value="115200">115200</option>
-                </select>
-                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
+            <!-- RTU Connection Options -->
+            <div id="rtuOptions">
+                <div class="form-group">
+                    <label>{{Port série}}</label>
+                    <select class="form-control" id="serialPort">
+                        <?php
+                        $usbMapping = jeedom::getUsbMapping('', true);
+                        if (is_array($usbMapping)) {
+                            foreach ($usbMapping as $key => $value) {
+                                echo '<option value="' . $value . '">' . $key . ' (' . $value . ')</option>';
+                            }
+                        }
+                        ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>{{Vitesse de communication (Baud Rate)}}</label>
+                    <select class="form-control" id="baudRate">
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400" selected>38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                    <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
+                </div>
+            </div>
+
+            <!-- TCP Connection Options -->
+            <div id="tcpOptions" style="display: none;">
+                <div class="form-group">
+                    <label>{{Adresse IP du convertisseur}}</label>
+                    <input type="text" class="form-control" id="tcpHost" placeholder="192.168.1.100">
+                    <small class="text-muted">{{Adresse IP du convertisseur Modbus TCP (ex: Waveshare)}}</small>
+                </div>
+
+                <div class="form-group">
+                    <label>{{Port TCP}}</label>
+                    <input type="number" class="form-control" id="tcpPort" min="1" max="65535" value="4196" placeholder="4196">
+                    <small class="text-muted">{{Port TCP du convertisseur (4196 par défaut pour Waveshare, 502 pour Modbus standard)}}</small>
+                </div>
             </div>
 
             <div class="alert alert-info" style="margin-bottom: 15px;">
@@ -287,6 +313,18 @@ $(function() {
         });
     });
 
+    // Connection type change handler
+    $('#connectionType').on('change', function() {
+        const connectionType = $(this).val();
+        if (connectionType === 'tcp') {
+            $('#rtuOptions').hide();
+            $('#tcpOptions').show();
+        } else {
+            $('#rtuOptions').show();
+            $('#tcpOptions').hide();
+        }
+    });
+
     // Update type change handler
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
@@ -325,14 +363,43 @@ $(function() {
             return;
         }
 
-        const port = $('#serialPort').val();
-        if (!port) {
-            showAlert('{{Veuillez sélectionner un port série}}', 'warning');
-            return;
-        }
-
-        const baudRate = parseInt($('#baudRate').val());
+        const connectionType = $('#connectionType').val();
         const method = $('#updateType').val();
+
+        // Validate connection-specific parameters
+        let port = null;
+        let baudRate = null;
+        let tcpHost = null;
+        let tcpPort = null;
+
+        if (connectionType === 'tcp') {
+            tcpHost = $('#tcpHost').val();
+            tcpPort = parseInt($('#tcpPort').val());
+
+            if (!tcpHost) {
+                showAlert('{{Veuillez saisir l\'adresse IP du convertisseur}}', 'warning');
+                return;
+            }
+
+            // Basic IP validation
+            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipRegex.test(tcpHost)) {
+                showAlert('{{Adresse IP invalide}}', 'warning');
+                return;
+            }
+
+            if (!tcpPort || tcpPort < 1 || tcpPort > 65535) {
+                showAlert('{{Port TCP invalide (doit être entre 1 et 65535)}}', 'warning');
+                return;
+            }
+        } else {
+            port = $('#serialPort').val();
+            if (!port) {
+                showAlert('{{Veuillez sélectionner un port série}}', 'warning');
+                return;
+            }
+            baudRate = parseInt($('#baudRate').val());
+        }
 
         // Disable start button
         $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> {{Démarrage...}}');
@@ -341,11 +408,19 @@ $(function() {
         const ajaxData = {
             action: 'startUpdate',
             address: address,
-            port: port,
-            baudRate: baudRate,
+            connectionType: connectionType,
             filename: uploadedFilename,
             method: method
         };
+
+        // Add connection-specific parameters
+        if (connectionType === 'tcp') {
+            ajaxData.tcpHost = tcpHost;
+            ajaxData.tcpPort = tcpPort;
+        } else {
+            ajaxData.port = port;
+            ajaxData.baudRate = baudRate;
+        }
 
         // Add subaddress only if provided
         if (subaddress !== null) {

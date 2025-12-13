@@ -201,10 +201,15 @@ try {
 
         $address = (int)init('address');
         $subaddress = init('subaddress') ? (int)init('subaddress') : null;
+        $connectionType = init('connectionType', 'rtu'); // 'rtu' or 'tcp'
         $port = init('port');
         $baudRate = (int)init('baudRate', 19200);
+        $tcpHost = init('tcpHost');
+        $tcpPort = (int)init('tcpPort', 4196);
         $filename = init('filename');
         $method = init('method');
+
+        $isTCP = ($connectionType === 'tcp');
 
         // Capture Jeedom username
         $username = 'system';
@@ -224,13 +229,28 @@ try {
             throw new Exception('Sous-adresse invalide (doit être entre 1 et 247) : ' . $subaddress);
         }
 
-        if (empty($port)) {
-            throw new Exception('Port série non spécifié');
-        }
+        // Validate connection parameters based on connection type
+        if ($isTCP) {
+            // TCP mode: validate host and port
+            if (empty($tcpHost)) {
+                throw new Exception('Adresse IP du convertisseur TCP non spécifiée');
+            }
+            if (!filter_var($tcpHost, FILTER_VALIDATE_IP)) {
+                throw new Exception('Adresse IP invalide : ' . $tcpHost);
+            }
+            if ($tcpPort < 1 || $tcpPort > 65535) {
+                throw new Exception('Port TCP invalide (doit être entre 1 et 65535) : ' . $tcpPort);
+            }
+        } else {
+            // RTU mode: validate serial port
+            if (empty($port)) {
+                throw new Exception('Port série non spécifié');
+            }
 
-        // Check if THIS specific port is locked
-        if (fidelixUpdater::isPortLocked($port)) {
-            throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter ou utiliser un autre port.');
+            // Check if THIS specific port is locked
+            if (fidelixUpdater::isPortLocked($port)) {
+                throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter ou utiliser un autre port.');
+            }
         }
 
         if (empty($filename)) {
@@ -255,22 +275,31 @@ try {
         $statusFile = fidelixUpdater::getDataPath('status') . '/status_' . $updateId . '.json';
         $scriptPath = fidelixUpdater::getDataPath() . '/update_' . $updateId . '.js';
 
+        // Build log message based on connection type
         $logMsg = 'Démarrage mise à jour par ' . $username . ' - UpdateID: ' . $updateId . ', Address: ' . $address;
         if ($subaddress !== null) {
             $logMsg .= ', Subaddress: ' . $subaddress . ' (pass-through mode)';
         }
-        $logMsg .= ', BaudRate: ' . $baudRate . ', Method: ' . $method . ', File: ' . $filePath . ', Port: ' . $port;
+        if ($isTCP) {
+            $logMsg .= ', Connection: TCP, Host: ' . $tcpHost . ':' . $tcpPort;
+        } else {
+            $logMsg .= ', Connection: RTU, Port: ' . $port . ', BaudRate: ' . $baudRate;
+        }
+        $logMsg .= ', Method: ' . $method . ', File: ' . $filePath;
         log::add('fidelixUpdater', 'info', $logMsg);
-        log::add('fidelixUpdater', 'debug', 'Port value received from frontend: "' . $port . '"');
 
-        // Stop Modbus daemon if needed
-        $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
-        log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
-        $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
-        if ($modbusStatus['stopped']) {
-            log::add('fidelixUpdater', 'info', 'Modbus daemon stopped successfully');
-        } else if (isset($modbusStatus['reason'])) {
-            log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped: ' . $modbusStatus['reason']);
+        // Stop Modbus daemon if needed (only for RTU mode)
+        $modbusStatus = array('stopped' => false, 'reason' => 'TCP mode - no daemon management needed');
+        if (!$isTCP) {
+            log::add('fidelixUpdater', 'debug', 'Port value received from frontend: "' . $port . '"');
+            $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+            log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
+            $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
+            if ($modbusStatus['stopped']) {
+                log::add('fidelixUpdater', 'info', 'Modbus daemon stopped successfully');
+            } else if (isset($modbusStatus['reason'])) {
+                log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped: ' . $modbusStatus['reason']);
+            }
         }
 
         // Initialize status file
@@ -280,6 +309,7 @@ try {
             'progress' => 0,
             'timestamp' => date('c'),
             'error' => null,
+            'connectionType' => $connectionType,
             'modbusStatus' => $modbusStatus,
             'modbusRestarted' => false
         );
@@ -288,6 +318,17 @@ try {
         // Generate Node.js script (CRITICAL: address as INTEGER, not string!)
         // CRITICAL: Pass FULL absolute path to file, not just filename!
         $subaddressLine = $subaddress !== null ? "    subaddress: {$subaddress}," : "";
+
+        // Build connection options based on type
+        if ($isTCP) {
+            $connectionOptionsJs = "    connectionType: 'tcp',\n" .
+                                   "    host: '{$tcpHost}',\n" .
+                                   "    tcpPort: {$tcpPort},";
+        } else {
+            $connectionOptionsJs = "    connectionType: 'rtu',\n" .
+                                   "    port: '{$port}',\n" .
+                                   "    baudRate: {$baudRate},";
+        }
 
         log::add('fidelixUpdater', 'debug', 'Generating Node.js script with file path: ' . $filePath);
 
@@ -352,8 +393,7 @@ const options = {
     address: {$address},
 {$subaddressLine}
     type: '{$method}',
-    port: '{$port}',
-    baudRate: {$baudRate},
+{$connectionOptionsJs}
     statusFile: '{$statusFile}'
 };
 
@@ -416,10 +456,10 @@ JSCODE;
         $nodejsLog = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/logsJeedom.txt';
 
         // Register process in registry with log file paths
-        fidelixUpdater::registerProcess(array(
+        $processInfo = array(
             'updateId' => $updateId,
             'pid' => $pid,
-            'port' => $port,
+            'connectionType' => $connectionType,
             'address' => $address,
             'subaddress' => $subaddress,
             'type' => $method,
@@ -427,7 +467,17 @@ JSCODE;
             'username' => $username,
             'nodejsLog' => $nodejsLog,
             'stderrLog' => $stderrLog
-        ));
+        );
+
+        // Add connection-specific fields
+        if ($isTCP) {
+            $processInfo['tcpHost'] = $tcpHost;
+            $processInfo['tcpPort'] = $tcpPort;
+        } else {
+            $processInfo['port'] = $port;
+        }
+
+        fidelixUpdater::registerProcess($processInfo);
 
         // Return IMMEDIATELY with updateId and statusFile name
         ajax::success(array(
@@ -590,57 +640,34 @@ JSCODE;
         // Sync processes with status files first
         fidelixUpdater::syncActiveProcesses();
 
+        $connectionType = init('connectionType', 'rtu'); // 'rtu' or 'tcp'
         $port = init('port');
         $address = (int)init('address');
         $baudRate = (int)init('baudRate', 19200);
+        $tcpHost = init('tcpHost');
+        $tcpPort = (int)init('tcpPort', 4196);
 
-        if (empty($port)) {
-            throw new Exception('Port série non spécifié');
-        }
+        $isTCP = ($connectionType === 'tcp');
 
         if (empty($address) || $address < 1 || $address > 247) {
             throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
         }
-
-        // Check if THIS specific port is locked
-        if (fidelixUpdater::isPortLocked($port)) {
-            throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter avant de tester la connexion.');
-        }
-
-        log::add('fidelixUpdater', 'info', 'Test de connexion - Port: ' . $port . ', Address: ' . $address . ', BaudRate: ' . $baudRate);
 
         // Check Node.js installation
         $nodejs = fidelixUpdaterHelper::checkNodeJs();
         $nodeInstalled = $nodejs['installed'];
         $nodeVersion = $nodejs['version'];
 
-        // Check port permissions (Unix-level only, no I/O test)
-        $portPermissions = fidelixUpdaterHelper::checkPortPermissions($port);
-
-        // Check if www-data is in dialout group
-        $dialout = fidelixUpdaterHelper::checkDialoutGroup();
-        $hasDialoutPermission = $dialout['inDialout'];
-        $groups = $dialout['groups'];
-
+        // Build base diagnostics
         $diagnostics = array(
             'nodejs' => array(
                 'installed' => $nodeInstalled,
                 'version' => trim($nodeVersion)
             ),
-            'port' => array(
-                'path' => $port,
-                'exists' => $portPermissions['exists'],
-                'readable' => $portPermissions['readable'],
-                'writable' => $portPermissions['writable'],
-                'checkMethod' => $portPermissions['reason']
-            ),
-            'permissions' => array(
-                'wwwDataInDialout' => $hasDialoutPermission,
-                'groups' => trim($groups)
-            )
+            'connectionType' => $connectionType
         );
 
-        // If basic checks fail, return early
+        // If Node.js not installed, return early
         if (!$nodeInstalled) {
             ajax::success(array(
                 'success' => false,
@@ -651,57 +678,128 @@ JSCODE;
             return;
         }
 
-        if (!$portPermissions['exists']) {
-            ajax::success(array(
-                'success' => false,
-                'error' => 'Le port série n\'existe pas : ' . $port,
-                'diagnostics' => $diagnostics,
-                'moduleInfo' => null
-            ));
-            return;
+        // TCP-specific validation and diagnostics
+        if ($isTCP) {
+            if (empty($tcpHost)) {
+                throw new Exception('Adresse IP du convertisseur TCP non spécifiée');
+            }
+            if (!filter_var($tcpHost, FILTER_VALIDATE_IP)) {
+                throw new Exception('Adresse IP invalide : ' . $tcpHost);
+            }
+            if ($tcpPort < 1 || $tcpPort > 65535) {
+                throw new Exception('Port TCP invalide (doit être entre 1 et 65535) : ' . $tcpPort);
+            }
+
+            log::add('fidelixUpdater', 'info', 'Test de connexion TCP - Host: ' . $tcpHost . ':' . $tcpPort . ', Address: ' . $address);
+
+            $diagnostics['tcp'] = array(
+                'host' => $tcpHost,
+                'port' => $tcpPort
+            );
+
+            // Generate unique test ID
+            $testId = uniqid('test_', true);
+            $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
+            $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnectionTCP.js';
+
+            // Run TCP test script (synchronous - wait for result)
+            $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
+                   escapeshellarg($tcpHost) . " " .
+                   escapeshellarg($tcpPort) . " " .
+                   escapeshellarg($address) . " " .
+                   escapeshellarg($resultFile) . " 2>&1";
+
+            $output = array();
+            $returnCode = 0;
+            exec($cmd, $output, $returnCode);
+
+            log::add('fidelixUpdater', 'debug', 'TCP test command executed - Return code: ' . $returnCode);
+
+        } else {
+            // RTU-specific validation and diagnostics
+            if (empty($port)) {
+                throw new Exception('Port série non spécifié');
+            }
+
+            // Check if THIS specific port is locked
+            if (fidelixUpdater::isPortLocked($port)) {
+                throw new Exception('Un processus de mise à jour est déjà en cours sur ce port série (' . basename($port) . '). Veuillez patienter avant de tester la connexion.');
+            }
+
+            log::add('fidelixUpdater', 'info', 'Test de connexion RTU - Port: ' . $port . ', Address: ' . $address . ', BaudRate: ' . $baudRate);
+
+            // Check port permissions (Unix-level only, no I/O test)
+            $portPermissions = fidelixUpdaterHelper::checkPortPermissions($port);
+
+            // Check if www-data is in dialout group
+            $dialout = fidelixUpdaterHelper::checkDialoutGroup();
+            $hasDialoutPermission = $dialout['inDialout'];
+            $groups = $dialout['groups'];
+
+            $diagnostics['port'] = array(
+                'path' => $port,
+                'exists' => $portPermissions['exists'],
+                'readable' => $portPermissions['readable'],
+                'writable' => $portPermissions['writable'],
+                'checkMethod' => $portPermissions['reason']
+            );
+            $diagnostics['permissions'] = array(
+                'wwwDataInDialout' => $hasDialoutPermission,
+                'groups' => trim($groups)
+            );
+
+            if (!$portPermissions['exists']) {
+                ajax::success(array(
+                    'success' => false,
+                    'error' => 'Le port série n\'existe pas : ' . $port,
+                    'diagnostics' => $diagnostics,
+                    'moduleInfo' => null
+                ));
+                return;
+            }
+
+            // If permissions are not OK, return early with clear error message
+            if (!$portPermissions['readable'] || !$portPermissions['writable']) {
+                ajax::success(array(
+                    'success' => false,
+                    'error' => 'Permissions insuffisantes sur le port série. L\'utilisateur www-data doit être dans le groupe dialout.',
+                    'diagnostics' => $diagnostics,
+                    'moduleInfo' => null
+                ));
+                return;
+            }
+
+            // Generate unique test ID
+            $testId = uniqid('test_', true);
+            $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
+            $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
+
+            // Stop Modbus daemon if needed before testing (only for RTU)
+            $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
+            log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
+            $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
+            if ($modbusStatus['stopped']) {
+                log::add('fidelixUpdater', 'info', 'Modbus daemon stopped for connection test');
+            } else if (isset($modbusStatus['reason'])) {
+                log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped for test: ' . $modbusStatus['reason']);
+            }
+
+            // Run RTU test script (synchronous - wait for result)
+            $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
+                   escapeshellarg($port) . " " .
+                   escapeshellarg($address) . " " .
+                   escapeshellarg($baudRate) . " " .
+                   escapeshellarg($resultFile) . " 2>&1";
+
+            $output = array();
+            $returnCode = 0;
+            exec($cmd, $output, $returnCode);
+
+            log::add('fidelixUpdater', 'debug', 'RTU test command executed - Return code: ' . $returnCode);
+
+            // Restart Modbus daemon if it was stopped
+            fidelixUpdater::restartModbusDaemonIfNeeded($modbusStatus);
         }
-
-        // If permissions are not OK, return early with clear error message
-        if (!$portPermissions['readable'] || !$portPermissions['writable']) {
-            ajax::success(array(
-                'success' => false,
-                'error' => 'Permissions insuffisantes sur le port série. L\'utilisateur www-data doit être dans le groupe dialout.',
-                'diagnostics' => $diagnostics,
-                'moduleInfo' => null
-            ));
-            return;
-        }
-
-        // Generate unique test ID
-        $testId = uniqid('test_', true);
-        $resultFile = fidelixUpdater::getDataPath() . '/test_result_' . $testId . '.json';
-        $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnection.js';
-
-        // Stop Modbus daemon if needed before testing
-        $autoStopModbus = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1);
-        log::add('fidelixUpdater', 'debug', 'Auto stop Modbus config: ' . ($autoStopModbus ? 'enabled' : 'disabled'));
-        $modbusStatus = fidelixUpdater::stopModbusDaemonIfNeeded($port);
-        if ($modbusStatus['stopped']) {
-            log::add('fidelixUpdater', 'info', 'Modbus daemon stopped for connection test');
-        } else if (isset($modbusStatus['reason'])) {
-            log::add('fidelixUpdater', 'debug', 'Modbus daemon not stopped for test: ' . $modbusStatus['reason']);
-        }
-
-        // Run test script (synchronous - wait for result)
-        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
-               escapeshellarg($port) . " " .
-               escapeshellarg($address) . " " .
-               escapeshellarg($baudRate) . " " .
-               escapeshellarg($resultFile) . " 2>&1";
-
-        $output = array();
-        $returnCode = 0;
-        exec($cmd, $output, $returnCode);
-
-        log::add('fidelixUpdater', 'debug', 'Test command executed - Return code: ' . $returnCode);
-
-        // Restart Modbus daemon if it was stopped
-        fidelixUpdater::restartModbusDaemonIfNeeded($modbusStatus);
 
         // Read result file
         if (file_exists($resultFile)) {

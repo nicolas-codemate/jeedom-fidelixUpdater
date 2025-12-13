@@ -223,7 +223,10 @@ class fidelixUpdater extends eqLogic {
         $process = array(
             'updateId' => $processData['updateId'],
             'pid' => $processData['pid'],
-            'port' => $processData['port'],
+            'connectionType' => isset($processData['connectionType']) ? $processData['connectionType'] : 'rtu',
+            'port' => isset($processData['port']) ? $processData['port'] : null,
+            'tcpHost' => isset($processData['tcpHost']) ? $processData['tcpHost'] : null,
+            'tcpPort' => isset($processData['tcpPort']) ? $processData['tcpPort'] : null,
             'address' => $processData['address'],
             'subaddress' => isset($processData['subaddress']) ? $processData['subaddress'] : null,
             'type' => $processData['type'],

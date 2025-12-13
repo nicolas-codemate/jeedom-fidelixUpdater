@@ -1,5 +1,26 @@
 # Changelog - Fidelix Updater
 
+## Version 1.1.0 - 2025-12-13
+
+### Support Modbus TCP
+
+- Support Modbus TCP via convertisseur Ethernet (ex: Waveshare RS485 to POE ETH)
+- Selecteur de type de connexion RTU/TCP dans les modales de mise a jour et test
+- Affichage du type de connexion dans l'historique et les processus actifs
+- Documentation technique TCP dans docs/context/MODBUS_TCP_IMPLEMENTATION.md
+
+**Fichiers crees :**
+- FxTcpSocket.js - Wrapper socket TCP
+- FxModbusTCPMaster.js - Protocole Modbus TCP avec header MBAP
+- FxDeviceTCP.js - Operations device via TCP
+- FxSwUpdateTCP.js - Mise a jour software via TCP
+- FxFwUpdateTCP.js - Mise a jour firmware via TCP
+- testConnectionTCP.js - Script de test connexion TCP
+
+**Notes techniques :**
+- Delais specifiques TCP pour compatibilite convertisseurs Waveshare (2s apres mode programmation)
+- Support mode pass-through via TCP
+
 ## Version 1.0.9 - 2025-12-08
 
 - Affichage de la version du plugin directement dans la page de configuration (lecture depuis info.json)
