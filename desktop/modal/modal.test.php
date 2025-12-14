@@ -87,7 +87,7 @@ if (!isConnect('admin')) {
 
                 <div class="form-group">
                     <label>{{Port TCP}}</label>
-                    <input type="number" class="form-control" id="testTcpPort" min="1" max="65535" value="4196" placeholder="4196">
+                    <input type="number" class="form-control" id="testTcpPort" min="1" max="65535" value="502" placeholder="502">
                     <small class="text-muted">{{Port TCP du convertisseur (4196 par défaut pour Waveshare, 502 pour Modbus standard)}}</small>
                 </div>
             </div>
@@ -190,9 +190,22 @@ if (!isConnect('admin')) {
 
 <script>
 $(function() {
+    // Restore connection type from localStorage
+    const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
+    if (savedConnectionType) {
+        $('#testConnectionType').val(savedConnectionType);
+        if (savedConnectionType === 'tcp') {
+            $('#testRtuOptions').hide();
+            $('#testTcpOptions').show();
+            $('#testInfoRtu').hide();
+            $('#testInfoTcp').show();
+        }
+    }
+
     // Connection type change handler
     $('#testConnectionType').on('change', function() {
         const connectionType = $(this).val();
+        localStorage.setItem('fidelixUpdater_connectionType', connectionType);
         if (connectionType === 'tcp') {
             $('#testRtuOptions').hide();
             $('#testTcpOptions').show();
