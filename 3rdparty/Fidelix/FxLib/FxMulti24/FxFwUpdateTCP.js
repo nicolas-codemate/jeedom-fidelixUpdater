@@ -1,5 +1,28 @@
 // Copyright 2024 - TCP version of FxFwUpdate
 // Based on FxFwUpdate.js but uses TCP transport
+//
+// ============================================================================
+// IMPORTANT LIMITATION - FIRMWARE UPDATE VIA TCP NOT SUPPORTED
+// ============================================================================
+// The firmware update process uses proprietary Fidelix commands ("Versio",
+// "Progrb", etc.) that are sent as raw bytes without Modbus framing.
+//
+// When using a Modbus TCP gateway (like Waveshare RS485-to-ETH):
+// - In "Modbus TCP to RTU" mode: The gateway expects valid Modbus TCP frames
+//   with MBAP headers. Raw proprietary commands are not understood.
+// - In "Transparent/Raw TCP" mode: The gateway passes bytes through, but the
+//   Fidelix module expects RTU frames with CRC checksums, which this code
+//   does not generate (it relies on the gateway for CRC in Modbus mode).
+//
+// As a result, firmware updates MUST be performed via RTU (serial/USB-RS485).
+// Only software updates (.M24IEC) work via TCP, and ONLY in direct mode
+// (passThroughModule.address === 0). Pass-through mode also requires
+// proprietary commands and will not work via TCP.
+//
+// This file is kept for potential future implementation but is currently
+// non-functional. The UI should disable firmware update option when TCP
+// connection type is selected.
+// ============================================================================
 'use strict'
 
 // *******************************************************************
@@ -23,8 +46,11 @@ console.log = function(message) {
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
-const NUM_OF_RETRIES = 10;
-const PORT_STABILIZATION_DELAY = 500;
+// TCP timeouts and retry settings (longer than RTU due to converter latency)
+const TCP_RESPONSE_TIMEOUT = 10000;             // Modbus response timeout
+const TCP_PORT_STABILIZATION_DELAY = 500;       // Delay after opening connection
+const TCP_PHASE_DELAY = 500;                    // Delay between update phases
+const TCP_NUM_OF_RETRIES = 10;                  // Number of retries for operations
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -265,7 +291,7 @@ function fxFwUpdateTCP() {
                     else if (pageReported != (page + 1)) {
                         return (
                             Q.fcall(function() {
-                                if (l_RetryCounter++ >= NUM_OF_RETRIES)
+                                if (l_RetryCounter++ >= TCP_NUM_OF_RETRIES)
                                     return Q.reject("Device is not ready for next page " + (page + 1));
                             })
                             .delay(50)
@@ -295,7 +321,7 @@ function fxFwUpdateTCP() {
                     return waitDeviceReady(page);
                 })
                 .catch (function(err) {
-                    if (l_RetryCounter++ >= NUM_OF_RETRIES)
+                    if (l_RetryCounter++ >= TCP_NUM_OF_RETRIES)
                         deferred.reject(err);
                     else
                         return process.nextTick(sendPacket.bind(null, page));
@@ -333,39 +359,39 @@ function fxFwUpdateTCP() {
             .then(function() {
                 console.log('[FxFwUpdateTCP] TCP connection opened successfully');
             })
-            .delay(PORT_STABILIZATION_DELAY)
+            .delay(TCP_PORT_STABILIZATION_DELAY)
             .then(function() {
-                console.log('[FxFwUpdateTCP] Connection stabilized after ' + PORT_STABILIZATION_DELAY + 'ms delay');
+                console.log('[FxFwUpdateTCP] Connection stabilized after ' + TCP_PORT_STABILIZATION_DELAY + 'ms delay');
             })
             .then(Q.fbind(notifyProgress, {status : "Activating boot mode...", progress : 5}))
             .then(function() {
                 console.log('[FxFwUpdateTCP] Activating boot Mode...')
                 return (
-                    repeatUntilResolvedOrNoRetriesLeft(Q.fbind(self.setupBootMode, (self.passThroughModule.address !== 0), true), 100, NUM_OF_RETRIES)
+                    repeatUntilResolvedOrNoRetriesLeft(Q.fbind(self.setupBootMode, (self.passThroughModule.address !== 0), true), 100, TCP_NUM_OF_RETRIES)
                     .fail(function (err) {
                         console.log('[FxFwUpdateTCP] Error during boot mode activation')
                         return (Q.reject("Unable to activate boot mode : " + err));
                     })
                 )
             })
-            .delay(500)
+            .delay(TCP_PHASE_DELAY)
             .then(Q.fbind(notifyProgress, {status : "Setting up device to the programming mode...", progress : 7}))
             .then(function() {
                 console.log('[FxFwUpdateTCP] Setting up device to the programming mode...');
                 return (
-                    repeatUntilResolvedOrNoRetriesLeft(self.setupFwProgramMode, 100, NUM_OF_RETRIES)
+                    repeatUntilResolvedOrNoRetriesLeft(self.setupFwProgramMode, 100, TCP_NUM_OF_RETRIES)
                     .fail(function(err) {
                         return (Q.reject("Unable to set device to the programming mode : " + err));
                     })
                 )
             })
-            .delay(500)
+            .delay(TCP_PHASE_DELAY)
             .then(Q.fbind(notifyProgress, {phase : "Programming", status : "Programming device... ", progress : 10}))
             .then(function() {
                 console.log("[FxFwUpdateTCP] Programming phase started");
                 return Q.fbind(transferData)();
             })
-            .delay(500)
+            .delay(TCP_PHASE_DELAY)
             .then(Q.fbind(notifyProgress, {phase : "Programming OK", status : "Device programmed successfully...", progress : 100}))
             .then(function() {
                 console.log("[FxFwUpdateTCP] Programming phase completed successfully");
@@ -402,7 +428,7 @@ function fxFwUpdateTCP() {
             options.data = new Buffer( new Uint8Array(options.data) );
 
             m_Options = options || {};
-            m_Options.responseTimeout = 5000;
+            m_Options.responseTimeout = TCP_RESPONSE_TIMEOUT;
 
             m_Deferred = Q.defer();
 

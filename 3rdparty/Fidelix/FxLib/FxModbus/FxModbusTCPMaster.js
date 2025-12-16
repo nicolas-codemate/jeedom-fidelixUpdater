@@ -15,9 +15,10 @@ const Q = require('q');
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
-const RESPONSE_TIMEOUT_DEFAULT = 1000;
-const TRANSACTION_BUFFER_SIZE = 5;
-const TRANSACTION_DELAY_MIN = 1;
+// TCP Modbus defaults (can be overridden by options)
+const TCP_RESPONSE_TIMEOUT_DEFAULT = 5000;      // Default response timeout (increased for TCP converters)
+const TCP_TRANSACTION_BUFFER_SIZE = 5;          // Max queued transactions
+const TCP_TRANSACTION_DELAY_MIN = 1;            // Minimum delay between transactions
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -30,6 +31,11 @@ function fxModbusTCPMaster() {
     // Request to create base class
     fxModbusTCPMaster.super_.call(this);
 
+    // Prevent ERR_UNHANDLED_ERROR crashes - attach default error handler
+    this.on('error', function(err) {
+        fxLog.error('FxModbusTCPMaster error event: ' + err);
+    });
+
     // *******************************************************************
     // PRIVATE VARIABLES
     // *******************************************************************
@@ -37,7 +43,7 @@ function fxModbusTCPMaster() {
 
     // Transaction buffer
     var m_TransactionQueue = [];
-    var m_TransactionDelay = TRANSACTION_DELAY_MIN;
+    var m_TransactionDelay = TCP_TRANSACTION_DELAY_MIN;
 
     // Transaction ID for MBAP header (increments with each request)
     var m_TransactionId = 0;
@@ -50,7 +56,7 @@ function fxModbusTCPMaster() {
     // *******************************************************************
     // PUBLIC VARIABLES
     // *******************************************************************
-    this.responseTimeout = RESPONSE_TIMEOUT_DEFAULT;
+    this.responseTimeout = TCP_RESPONSE_TIMEOUT_DEFAULT;
     this.transactionCounter = 0;
     this.validResponseCounter = 0;
     this.timeoutCounter = 0;
@@ -342,7 +348,7 @@ function fxModbusTCPMaster() {
         if (options.responseTimeout)
             self.setResponseTimeout(options.responseTimeout);
 
-        m_TransactionDelay = options.transactionDelay || TRANSACTION_DELAY_MIN;
+        m_TransactionDelay = options.transactionDelay || TCP_TRANSACTION_DELAY_MIN;
 
         m_Closing = false;
         m_TransactionQueue = [];
@@ -375,13 +381,13 @@ function fxModbusTCPMaster() {
             return Q.reject("closing connection");
         }
 
-        if (m_TransactionQueue.length >= TRANSACTION_BUFFER_SIZE)
+        if (m_TransactionQueue.length >= TCP_TRANSACTION_BUFFER_SIZE)
             return Q.reject("Modbus transaction buffer is full...");
 
         deferred = deferred || Q.defer();
 
         async function givePromise(defer, promiseToWait) {
-            const delay = Math.max(m_TransactionDelay, TRANSACTION_DELAY_MIN);
+            const delay = Math.max(m_TransactionDelay, TCP_TRANSACTION_DELAY_MIN);
             if (promiseToWait) {
                 await promiseToWait.promise;
             }

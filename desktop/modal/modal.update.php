@@ -63,10 +63,14 @@ if (!isConnect('admin')) {
                 <small class="text-muted">{{Adresse du module à mettre à jour (ou du module maître si mode pass-through)}}</small>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="subaddressGroup">
                 <label>{{Sous-adresse (mode pass-through)}} <span class="text-muted">(Optionnel)</span></label>
                 <input type="number" class="form-control" id="deviceSubaddress" min="1" max="247" placeholder="">
-                <small class="text-muted">{{Si renseigné, la mise à jour se fera à travers le module maître (adresse principale) vers le module esclave (sous-adresse)}}</small>
+                <small class="text-muted" id="subaddressHelp">{{Si renseigné, la mise à jour se fera à travers le module maître (adresse principale) vers le module esclave (sous-adresse)}}</small>
+                <small class="text-warning" id="subaddressTcpWarning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    {{Le mode pass-through n'est pas disponible en TCP. Utilisez une connexion RTU pour mettre à jour un module via pass-through.}}
+                </small>
             </div>
 
             <div class="form-group">
@@ -118,6 +122,12 @@ if (!isConnect('admin')) {
                     <label>{{Port TCP}}</label>
                     <input type="number" class="form-control" id="tcpPort" min="1" max="65535" value="502" placeholder="502">
                     <small class="text-muted">{{Port TCP du convertisseur (4196 par défaut pour Waveshare, 502 pour Modbus standard)}}</small>
+                </div>
+
+                <div class="alert alert-warning" id="tcpFirmwareWarning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>{{Firmware non disponible en TCP}}</strong><br>
+                    {{La mise à jour du firmware utilise un protocole propriétaire Fidelix incompatible avec les convertisseurs Modbus TCP. Pour mettre à jour le firmware, veuillez utiliser une connexion série RTU (USB/RS485).}}
                 </div>
             </div>
 
@@ -313,6 +323,40 @@ $(function() {
         });
     });
 
+    // Function to update firmware and pass-through availability based on connection type
+    function updateTcpLimitations(connectionType) {
+        const isTcp = (connectionType === 'tcp');
+        const firmwareOption = $('#updateType option[value="m24firmware"]');
+        const currentUpdateType = $('#updateType').val();
+
+        if (isTcp) {
+            // Disable firmware option in TCP mode
+            firmwareOption.prop('disabled', true);
+            firmwareOption.text('{{Firmware Multi24}} (.hex) - {{RTU uniquement}}');
+
+            // If firmware was selected, switch to software
+            if (currentUpdateType === 'm24firmware') {
+                $('#updateType').val('m24software');
+                $('#tcpFirmwareWarning').show();
+            }
+
+            // Disable pass-through (subaddress) in TCP mode
+            $('#deviceSubaddress').prop('disabled', true).val('');
+            $('#subaddressHelp').hide();
+            $('#subaddressTcpWarning').show();
+        } else {
+            // Enable firmware option in RTU mode
+            firmwareOption.prop('disabled', false);
+            firmwareOption.text('{{Firmware Multi24}} (.hex)');
+            $('#tcpFirmwareWarning').hide();
+
+            // Enable pass-through (subaddress) in RTU mode
+            $('#deviceSubaddress').prop('disabled', false);
+            $('#subaddressHelp').show();
+            $('#subaddressTcpWarning').hide();
+        }
+    }
+
     // Restore connection type from localStorage
     const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
     if (savedConnectionType) {
@@ -321,6 +365,7 @@ $(function() {
             $('#rtuOptions').hide();
             $('#tcpOptions').show();
         }
+        updateTcpLimitations(savedConnectionType);
     }
 
     // Connection type change handler
@@ -334,11 +379,21 @@ $(function() {
             $('#rtuOptions').show();
             $('#tcpOptions').hide();
         }
+        updateTcpLimitations(connectionType);
     });
 
     // Update type change handler
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
+        const connectionType = $('#connectionType').val();
+
+        // Show/hide TCP firmware warning
+        if (connectionType === 'tcp' && updateType === 'm24firmware') {
+            $('#tcpFirmwareWarning').show();
+        } else {
+            $('#tcpFirmwareWarning').hide();
+        }
+
         // Note: Accept attribute is permissive (*) to support variable extensions like .hex-XXXX or .dat-XXXX
         // Validation is done server-side after upload
         if (updateType === 'm24firmware' || updateType === 'displayfirmware') {

@@ -14,8 +14,9 @@ const Q = require('q');
 // *******************************************************************
 // DEFINITIONS
 // *******************************************************************
-const WAIT_TIMEOUT_DEFAULT = 1000;
-const CONNECT_TIMEOUT_DEFAULT = 5000;
+// TCP Socket timeouts
+const TCP_SOCKET_WAIT_TIMEOUT = 3000;           // Default wait for response timeout
+const TCP_SOCKET_CONNECT_TIMEOUT = 10000;       // Connection establishment timeout
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -85,7 +86,7 @@ function fxTcpSocket() {
 
     // Wait response from device
     this.waitResponse = function(patternToWait, length, msTimeout) {
-        msTimeout = msTimeout || WAIT_TIMEOUT_DEFAULT;
+        msTimeout = msTimeout || TCP_SOCKET_WAIT_TIMEOUT;
         patternToWait = patternToWait || Buffer.from([]);
         length = length || patternToWait.length;
         fxLog.trace(`waitResponse(${Buffer.concat([patternToWait]).toString('hex')}, ${msTimeout})`);
@@ -150,7 +151,7 @@ function fxTcpSocket() {
         m_Socket.on('connect', onConnect);
 
         // Connection timeout
-        var connectTimeout = (options && options.connectTimeout) || CONNECT_TIMEOUT_DEFAULT;
+        var connectTimeout = (options && options.connectTimeout) || TCP_SOCKET_CONNECT_TIMEOUT;
         var timeoutHandle = setTimeout(function() {
             if (!self.isOpen) {
                 m_Socket.destroy();

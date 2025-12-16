@@ -1,5 +1,20 @@
 // Copyright 2024 - TCP version of FxDevice
 // Based on FxDevice.js but uses TCP transport instead of RTU
+//
+// ============================================================================
+// LIMITATION: PROPRIETARY COMMANDS NOT SUPPORTED VIA TCP GATEWAYS
+// ============================================================================
+// Functions like askBootVersion(), sendBootModeCommand(), sendPassThroughCommand(),
+// and setupFwProgramMode() use proprietary Fidelix commands ("Versio", "Passth",
+// "Progrb") that are NOT standard Modbus. These are sent as raw bytes.
+//
+// These functions will NOT work through Modbus TCP gateways because:
+// 1. Gateways in "Modbus TCP to RTU" mode expect valid Modbus frames
+// 2. Gateways in "Transparent" mode require CRC checksums (not generated here)
+//
+// Only standard Modbus operations (readHoldingRegisters, writeSingleRegister,
+// writeMultipleRegisters) work via TCP gateways.
+// ============================================================================
 'use strict'
 
 // *******************************************************************
@@ -15,7 +30,11 @@ const Q = require('q');
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
-const WAIT_PATTERN_TIMEOUT = 3000;
+// TCP timeouts (longer than RTU due to converter latency)
+const TCP_WAIT_PATTERN_TIMEOUT = 5000;          // Timeout for pattern matching responses
+const TCP_PROGRAMMING_MODE_DELAY = 3000;        // Delay after programming mode command
+const TCP_PROGRAMMING_MODE_RETRIES = 10;        // Number of retries for programming mode
+const TCP_PROGRAMMING_MODE_RETRY_DELAY = 2000;  // Delay between retries
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -27,6 +46,11 @@ function fxDeviceTCP() {
 
     // Request to create base class
     fxDeviceTCP.super_.call(this);
+
+    // Prevent ERR_UNHANDLED_ERROR crashes - attach default error handler
+    this.on('error', function(err) {
+        fxLog.error('FxDeviceTCP error event: ' + err);
+    });
 
     // *******************************************************************
     // PRIVATE VARIABLES
@@ -134,7 +158,7 @@ function fxDeviceTCP() {
                     l_PatternToWait[0] = l_Buffer[1];
                     l_PatternToWait.write('V', 1);
 
-                    return (tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, WAIT_PATTERN_TIMEOUT))
+                    return (tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, TCP_WAIT_PATTERN_TIMEOUT))
                 })
                 .then(deferred.resolve)
                 .catch(deferred.reject)
@@ -178,7 +202,7 @@ function fxDeviceTCP() {
                     l_PatternToWait[0] = l_Buffer[1];
                     l_PatternToWait.write('OK', 1);
 
-                    return (tryReadPattern(l_Buffer, l_PatternToWait, 3, 0, 0, WAIT_PATTERN_TIMEOUT))
+                    return (tryReadPattern(l_Buffer, l_PatternToWait, 3, 0, 0, TCP_WAIT_PATTERN_TIMEOUT))
                 })
                 .then(deferred.resolve)
                 .catch(deferred.reject)
@@ -309,10 +333,10 @@ function fxDeviceTCP() {
                 }
             })
             .then(Q.fbind(self.writeSingleRegister, [self.passThroughModule.address, self.targetModule.address], 0xFF3E, 0xAAAA))
-            .delay(2000) // TCP needs longer delay after programming mode command
+            .delay(TCP_PROGRAMMING_MODE_DELAY)
             .then(function() {
                 var deferred = Q.defer();
-                var retrycount = 5;
+                var retrycount = TCP_PROGRAMMING_MODE_RETRIES;
 
                 function doLoop() {
                     self.readHoldingRegisters([self.passThroughModule.address, self.targetModule.address], 0xFF3F, 1, l_Values)
@@ -323,7 +347,7 @@ function fxDeviceTCP() {
                         deferred.resolve();
                     })
                     .catch(function(err) {
-                        (retrycount-- <= 0) ? deferred.reject(err) : setTimeout(doLoop, 1000);
+                        (retrycount-- <= 0) ? deferred.reject(err) : setTimeout(doLoop, TCP_PROGRAMMING_MODE_RETRY_DELAY);
                     })
                 }
 
@@ -478,7 +502,7 @@ function fxDeviceTCP() {
                 l_PatternToWait[0] = ((self.passThroughModule.address != 0) ? (self.targetModule.address + 1) : self.targetModule.address);
                 l_PatternToWait.write('p', 1);
 
-                return (tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, WAIT_PATTERN_TIMEOUT))
+                return (tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, TCP_WAIT_PATTERN_TIMEOUT))
             })
             .then(function() {
                 if (self.passThroughModule.address != 0)
