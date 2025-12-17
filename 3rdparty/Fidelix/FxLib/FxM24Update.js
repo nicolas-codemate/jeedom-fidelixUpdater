@@ -190,7 +190,8 @@ function fxM24Update() {
       }
 
       // Determine connection type (RTU by default, TCP if specified)
-      const isTCP = options.connectionType === 'tcp';
+      // Note: 'tcp-transparent' is also TCP, just with transparent/raw mode enabled
+      const isTCP = options.connectionType === 'tcp' || options.connectionType === 'tcp-transparent';
 
       if (isTCP) {
         // Validate TCP options

@@ -2,26 +2,22 @@
 // Based on FxFwUpdate.js but uses TCP transport
 //
 // ============================================================================
-// IMPORTANT LIMITATION - FIRMWARE UPDATE VIA TCP NOT SUPPORTED
+// TCP CONNECTION MODES
 // ============================================================================
-// The firmware update process uses proprietary Fidelix commands ("Versio",
-// "Progrb", etc.) that are sent as raw bytes without Modbus framing.
+// This module supports two TCP connection modes:
 //
-// When using a Modbus TCP gateway (like Waveshare RS485-to-ETH):
-// - In "Modbus TCP to RTU" mode: The gateway expects valid Modbus TCP frames
-//   with MBAP headers. Raw proprietary commands are not understood.
-// - In "Transparent/Raw TCP" mode: The gateway passes bytes through, but the
-//   Fidelix module expects RTU frames with CRC checksums, which this code
-//   does not generate (it relies on the gateway for CRC in Modbus mode).
+// 1. TCP MODBUS MODE (transparentMode: false)
+//    - Gateway configured as "Modbus TCP to RTU"
+//    - Only standard Modbus operations work (software update, direct mode only)
+//    - Firmware update and pass-through NOT supported
 //
-// As a result, firmware updates MUST be performed via RTU (serial/USB-RS485).
-// Only software updates (.M24IEC) work via TCP, and ONLY in direct mode
-// (passThroughModule.address === 0). Pass-through mode also requires
-// proprietary commands and will not work via TCP.
+// 2. TCP TRANSPARENT MODE (transparentMode: true)
+//    - Gateway configured as "None" (transparent/raw TCP)
+//    - All features supported: firmware, software, pass-through
+//    - CRC is calculated and added to proprietary commands
 //
-// This file is kept for potential future implementation but is currently
-// non-functional. The UI should disable firmware update option when TCP
-// connection type is selected.
+// To use transparent mode, set options.transparentMode = true when calling
+// the program() function. The UI provides "TCP Transparent" option for this.
 // ============================================================================
 'use strict'
 
@@ -429,6 +425,12 @@ function fxFwUpdateTCP() {
 
             m_Options = options || {};
             m_Options.responseTimeout = TCP_RESPONSE_TIMEOUT;
+
+            // Enable transparent mode if requested (for raw RTU over TCP)
+            if (m_Options.transparentMode) {
+                self.setTransparentMode(true);
+                fxLog.debug("Transparent mode enabled for firmware update");
+            }
 
             m_Deferred = Q.defer();
 

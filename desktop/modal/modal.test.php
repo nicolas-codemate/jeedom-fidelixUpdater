@@ -39,8 +39,10 @@ if (!isConnect('admin')) {
                 <label>{{Type de connexion}}</label>
                 <select class="form-control" id="testConnectionType">
                     <option value="rtu">{{Série RTU}} (USB/RS485)</option>
-                    <option value="tcp">{{TCP/IP}} (Ethernet/Waveshare)</option>
+                    <option value="tcp">{{TCP Modbus}} (Convertisseur en mode Modbus TCP)</option>
+                    <option value="tcp-transparent">{{TCP Transparent}} (Convertisseur en mode None/Raw)</option>
                 </select>
+                <small class="text-muted" id="testConnectionTypeHelp"></small>
             </div>
 
             <!-- RTU Connection Options -->
@@ -190,23 +192,11 @@ if (!isConnect('admin')) {
 
 <script>
 $(function() {
-    // Restore connection type from localStorage
-    const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
-    if (savedConnectionType) {
-        $('#testConnectionType').val(savedConnectionType);
-        if (savedConnectionType === 'tcp') {
-            $('#testRtuOptions').hide();
-            $('#testTcpOptions').show();
-            $('#testInfoRtu').hide();
-            $('#testInfoTcp').show();
-        }
-    }
+    // Helper function to update UI based on connection type
+    function updateConnectionTypeUI(connectionType) {
+        const isTCP = (connectionType === 'tcp' || connectionType === 'tcp-transparent');
 
-    // Connection type change handler
-    $('#testConnectionType').on('change', function() {
-        const connectionType = $(this).val();
-        localStorage.setItem('fidelixUpdater_connectionType', connectionType);
-        if (connectionType === 'tcp') {
+        if (isTCP) {
             $('#testRtuOptions').hide();
             $('#testTcpOptions').show();
             $('#testInfoRtu').hide();
@@ -217,6 +207,29 @@ $(function() {
             $('#testInfoRtu').show();
             $('#testInfoTcp').hide();
         }
+
+        // Update help text
+        if (connectionType === 'tcp') {
+            $('#testConnectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "Modbus TCP to RTU".}}');
+        } else if (connectionType === 'tcp-transparent') {
+            $('#testConnectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "None" (Transparent/Raw).}}');
+        } else {
+            $('#testConnectionTypeHelp').text('');
+        }
+    }
+
+    // Restore connection type from localStorage
+    const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
+    if (savedConnectionType) {
+        $('#testConnectionType').val(savedConnectionType);
+        updateConnectionTypeUI(savedConnectionType);
+    }
+
+    // Connection type change handler
+    $('#testConnectionType').on('change', function() {
+        const connectionType = $(this).val();
+        localStorage.setItem('fidelixUpdater_connectionType', connectionType);
+        updateConnectionTypeUI(connectionType);
     });
 
     // Run test button handler
@@ -238,7 +251,9 @@ $(function() {
         };
 
         // Validate and add connection-specific parameters
-        if (connectionType === 'tcp') {
+        const isTcpConnection = (connectionType === 'tcp' || connectionType === 'tcp-transparent');
+
+        if (isTcpConnection) {
             const tcpHost = $('#testTcpHost').val();
             const tcpPort = parseInt($('#testTcpPort').val());
 
@@ -309,7 +324,8 @@ $(function() {
 
         // Determine connection type early
         const diag = result.diagnostics || {};
-        const isTCP = diag.connectionType === 'tcp';
+        const isTCP = (diag.connectionType === 'tcp' || diag.connectionType === 'tcp-transparent');
+        const isTransparent = (diag.connectionType === 'tcp-transparent');
 
         // Display overall status
         const alertClass = result.success ? 'alert-success' : 'alert-danger';
@@ -363,9 +379,14 @@ $(function() {
         }
 
         // Connection type
-        const connTypeLabel = isTCP
-            ? `<span class="label label-info"><i class="fas fa-network-wired"></i> TCP/IP</span>`
-            : `<span class="label label-info"><i class="fas fa-usb"></i> Série RTU</span>`;
+        let connTypeLabel;
+        if (isTransparent) {
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-network-wired"></i> TCP Transparent (Raw)</span>`;
+        } else if (isTCP) {
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-network-wired"></i> TCP Modbus</span>`;
+        } else {
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-usb"></i> Série RTU</span>`;
+        }
         $('#diag-connectionType').html(connTypeLabel);
 
         // Show/hide rows based on connection type

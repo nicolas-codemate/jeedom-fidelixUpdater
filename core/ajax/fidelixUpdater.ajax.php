@@ -209,7 +209,14 @@ try {
         $filename = init('filename');
         $method = init('method');
 
-        $isTCP = ($connectionType === 'tcp');
+        // TCP mode includes both 'tcp' (Modbus TCP) and 'tcp-transparent' (raw RTU over TCP)
+        $isTCP = ($connectionType === 'tcp' || $connectionType === 'tcp-transparent');
+
+        // Transparent mode: either explicitly set or automatically enabled for 'tcp-transparent' connectionType
+        $transparentMode = init('transparentMode') === 'true' || init('transparentMode') === true || init('transparentMode') === '1';
+        if ($connectionType === 'tcp-transparent') {
+            $transparentMode = true; // Force transparent mode for tcp-transparent connection type
+        }
 
         // Capture Jeedom username
         $username = 'system';
@@ -320,10 +327,20 @@ try {
         $subaddressLine = $subaddress !== null ? "    subaddress: {$subaddress}," : "";
 
         // Build connection options based on type
+        // Debug: log received parameters
+        file_put_contents(fidelixUpdater::getDataPath('logs') . '/debug_params.log',
+            "connectionType: $connectionType\n" .
+            "isTCP: " . ($isTCP ? 'true' : 'false') . "\n" .
+            "transparentMode (raw): " . var_export(init('transparentMode'), true) . "\n" .
+            "transparentMode (bool): " . ($transparentMode ? 'true' : 'false') . "\n"
+        );
+
         if ($isTCP) {
+            $transparentModeJs = $transparentMode ? 'true' : 'false';
             $connectionOptionsJs = "    connectionType: 'tcp',\n" .
                                    "    host: '{$tcpHost}',\n" .
-                                   "    tcpPort: {$tcpPort},";
+                                   "    tcpPort: {$tcpPort},\n" .
+                                   "    transparentMode: {$transparentModeJs},";
         } else {
             $connectionOptionsJs = "    connectionType: 'rtu',\n" .
                                    "    port: '{$port}',\n" .
@@ -647,7 +664,9 @@ JSCODE;
         $tcpHost = init('tcpHost');
         $tcpPort = (int)init('tcpPort', 4196);
 
-        $isTCP = ($connectionType === 'tcp');
+        // TCP mode includes both 'tcp' (Modbus TCP) and 'tcp-transparent' (raw RTU over TCP)
+        $isTCP = ($connectionType === 'tcp' || $connectionType === 'tcp-transparent');
+        $isTransparentMode = ($connectionType === 'tcp-transparent');
 
         if (empty($address) || $address < 1 || $address > 247) {
             throw new Exception('Adresse invalide (doit être entre 1 et 247) : ' . $address);
@@ -703,11 +722,14 @@ JSCODE;
             $scriptPath = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/testConnectionTCP.js';
 
             // Run TCP test script (synchronous - wait for result)
+            // 5th argument: transparent mode (true/false)
+            $transparentModeArg = $isTransparentMode ? 'true' : 'false';
             $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " " .
                    escapeshellarg($tcpHost) . " " .
                    escapeshellarg($tcpPort) . " " .
                    escapeshellarg($address) . " " .
-                   escapeshellarg($resultFile) . " 2>&1";
+                   escapeshellarg($resultFile) . " " .
+                   escapeshellarg($transparentModeArg) . " 2>&1";
 
             $output = array();
             $returnCode = 0;

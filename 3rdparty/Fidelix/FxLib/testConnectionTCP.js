@@ -1,4 +1,5 @@
 // Test connection script for Fidelix Multi24 via Modbus TCP
+// Supports both standard TCP (Modbus TCP) and transparent mode (raw RTU over TCP)
 'use strict';
 
 const FxDeviceTCP = require('./FxMulti24/FxDeviceTCP.js');
@@ -11,8 +12,9 @@ const fxDevice = new FxDeviceTCP();
 // Get arguments from command line
 const args = process.argv.slice(2);
 if (args.length < 4) {
-    console.error('Usage: node testConnectionTCP.js <host> <tcpPort> <address> <resultFile>');
+    console.error('Usage: node testConnectionTCP.js <host> <tcpPort> <address> <resultFile> [transparentMode]');
     console.error('Example: node testConnectionTCP.js 192.168.1.100 4196 1 /tmp/result.json');
+    console.error('Example (transparent): node testConnectionTCP.js 192.168.1.100 502 1 /tmp/result.json true');
     process.exit(1);
 }
 
@@ -20,14 +22,16 @@ const host = args[0];
 const tcpPort = parseInt(args[1]);
 const address = parseInt(args[2]);
 const resultFile = args[3];
+const transparentMode = args[4] === 'true' || args[4] === '1';
 
 // Initialize result object
 const result = {
     timestamp: new Date().toISOString(),
-    connectionType: 'tcp',
+    connectionType: transparentMode ? 'tcp-transparent' : 'tcp',
     host: host,
     tcpPort: tcpPort,
     address: address,
+    transparentMode: transparentMode,
     success: false,
     connected: false,
     moduleInfo: null,
@@ -53,7 +57,8 @@ function saveResult() {
 // Test procedure
 async function testConnection() {
     try {
-        console.log(`Testing TCP connection to Fidelix Multi24 at ${host}:${tcpPort}, address ${address}...`);
+        const modeStr = transparentMode ? 'TCP Transparent (raw RTU)' : 'TCP Modbus';
+        console.log(`Testing ${modeStr} connection to Fidelix Multi24 at ${host}:${tcpPort}, address ${address}...`);
 
         // Open the TCP connection
         console.log(`Opening TCP connection...`);
@@ -69,6 +74,12 @@ async function testConnection() {
                 result.diagnostics.tcpConnected = true;
                 console.log('TCP connection opened successfully');
             });
+
+        // Enable transparent mode if requested (must be done after connection is open)
+        if (transparentMode) {
+            console.log('Enabling transparent mode (raw RTU over TCP)...');
+            fxDevice.setTransparentMode(true);
+        }
 
         // Small delay to let connection stabilize
         await new Promise(resolve => setTimeout(resolve, 500));

@@ -1,6 +1,36 @@
 // Copyright 2024 - Modbus TCP Master
 // Based on FxModbusRTUMaster.js but adapted for TCP transport
 // TCP uses MBAP header instead of CRC
+//
+// ============================================================================
+// TRANSPARENT MODE SUPPORT - IMPLEMENTED (2024-12-17)
+// ============================================================================
+// This module supports two TCP connection modes:
+//
+// 1. STANDARD MODE (m_TransparentMode = false) - Default
+//    - For gateways in "Modbus TCP to RTU" mode (e.g., Waveshare RS485-to-ETH)
+//    - Uses MBAP header (7 bytes) for framing
+//    - Gateway handles RTU CRC conversion automatically
+//
+// 2. TRANSPARENT MODE (m_TransparentMode = true)
+//    - For gateways in "None" (transparent/raw TCP) mode
+//    - Uses RTU frame format with CRC-16
+//    - Frame: Address(1) + FunctionCode(1) + Data(n) + CRC(2)
+//    - Gateway passes bytes through unchanged
+//
+// To enable transparent mode, call setTransparentMode(true) before
+// performing Modbus operations. This affects:
+// - readHoldingRegisters()
+// - writeSingleRegister()
+// - writeMultipleRegisters()
+// - readInputRegisters()
+// - writeSingleCoil()
+// - writeMultipleCoils()
+// - readCoils()
+// - readDeviceIdentification()
+//
+// Note: Pass-through addressing is not supported in transparent mode.
+// ============================================================================
 'use strict'
 
 // *******************************************************************
@@ -52,6 +82,9 @@ function fxModbusTCPMaster() {
     var m_Request = null;
     var m_Response = null;
     var m_Closing = false;
+
+    // Transparent mode flag - when true, use RTU format (with CRC) instead of MBAP header
+    var m_TransparentMode = false;
 
     // *******************************************************************
     // PUBLIC VARIABLES
@@ -184,6 +217,147 @@ function fxModbusTCPMaster() {
         }, msTimeout);
 
         return deferred.promise;
+    }
+
+    // Get response from device (RTU mode - for transparent TCP)
+    // RTU response: Address(1) + FunctionCode(1) + Data(n) + CRC(2)
+    function getResponseRTU(addressToWait, response, expectedDataLength, msTimeout) {
+        fxLog.trace("getResponseRTU...");
+
+        var deferred = Q.defer();
+
+        // Expected total length: Address(1) + FC(1) + Data(expectedDataLength) + CRC(2)
+        var expectedLength = 2 + expectedDataLength + 2;
+        var l_iPos = 0;
+        var responseBuffer = Buffer.alloc(expectedLength + 10); // Extra buffer for safety
+
+        var onReceive = function(data) {
+            // Copy received data to response buffer
+            for (var i = 0; i < data.length && l_iPos < responseBuffer.length; i++) {
+                responseBuffer[l_iPos++] = data[i];
+            }
+
+            fxLog.trace("getResponseRTU: received " + l_iPos + "/" + expectedLength + " bytes");
+
+            // Check if we have minimum data to determine response length
+            if (l_iPos >= 3) {
+                var fc = responseBuffer[1];
+
+                // Handle exception response (FC with high bit set)
+                if (fc & 0x80) {
+                    // Exception response: Address(1) + FC(1) + ExceptionCode(1) + CRC(2) = 5 bytes
+                    if (l_iPos >= 5) {
+                        self.removeListener('receive', onReceive);
+                        clearTimeout(onTimeout);
+
+                        // Copy response (without CRC)
+                        for (var j = 0; j < 3; j++) {
+                            response[j] = responseBuffer[j];
+                        }
+                        deferred.resolve();
+                        return;
+                    }
+                } else {
+                    // For read functions (FC 1,2,3,4), byte 2 is the byte count
+                    // For write functions (FC 5,6,15,16), response is fixed length
+                    var totalLength;
+
+                    if (fc === 1 || fc === 2 || fc === 3 || fc === 4) {
+                        // Read response: Address(1) + FC(1) + ByteCount(1) + Data(n) + CRC(2)
+                        var byteCount = responseBuffer[2];
+                        totalLength = 3 + byteCount + 2;
+                    } else if (fc === 5 || fc === 6) {
+                        // Write single: Address(1) + FC(1) + Addr(2) + Value(2) + CRC(2) = 8
+                        totalLength = 8;
+                    } else if (fc === 15 || fc === 16) {
+                        // Write multiple: Address(1) + FC(1) + Addr(2) + Qty(2) + CRC(2) = 8
+                        totalLength = 8;
+                    } else {
+                        // Default: use expected length
+                        totalLength = expectedLength;
+                    }
+
+                    // If we have received enough data
+                    if (l_iPos >= totalLength) {
+                        self.removeListener('receive', onReceive);
+                        clearTimeout(onTimeout);
+
+                        // Copy response (without CRC) for compatibility with TCP code
+                        // response[0] = address, response[1] = FC, response[2+] = data
+                        for (var j = 0; j < totalLength - 2; j++) {
+                            response[j] = responseBuffer[j];
+                        }
+
+                        fxLog.trace("getResponseRTU complete: " + responseBuffer.slice(0, totalLength).toString('hex'));
+                        deferred.resolve();
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.on('receive', onReceive);
+
+        // Timeout handler
+        var onTimeout = setTimeout(function () {
+            self.removeListener('receive', onReceive);
+            fxLog.debug("getResponseRTU timeout after " + msTimeout + "ms, received " + l_iPos + " bytes");
+            deferred.reject("Timeout");
+        }, msTimeout);
+
+        return deferred.promise;
+    }
+
+    // Do transaction with modbus device (RTU mode - for transparent TCP)
+    // RTU frame: Address(1) + FunctionCode(1) + Data(n) + CRC(2)
+    function doTransactionRTU(address, pdu, response, expectedDataLength, msTimeout) {
+        fxLog.trace("doTransactionRTU...");
+
+        // Increment transaction counter
+        self.transactionCounter++;
+
+        // Build RTU frame: Address + PDU + CRC
+        var frameLength = 1 + pdu.length; // Address + PDU (CRC will be added)
+        var frame = Buffer.alloc(frameLength + 2); // +2 for CRC
+
+        frame[0] = address;
+        pdu.copy(frame, 1);
+
+        // Calculate and append CRC
+        return self.getCRC(frame, 0, frameLength)
+        .then(function(crc) {
+            frame[frameLength] = crc[0];     // CRC low byte
+            frame[frameLength + 1] = crc[1]; // CRC high byte
+
+            fxLog.debug("doTransactionRTU: sending " + frame.toString('hex'));
+
+            // Send request
+            return self.write(frame, 0, frame.length);
+        })
+        .fail(function(err) {
+            self.tcpErrorCounter++;
+            return Q.reject(err);
+        })
+        // Wait response
+        .then(function() {
+            return getResponseRTU(address, response, expectedDataLength, msTimeout)
+            .fail(function(err) {
+                self.timeoutCounter++;
+                return Q.reject(err);
+            });
+        })
+        // Check if response is valid
+        .then(function() {
+            // Check for Modbus exception
+            if (response[1] & 0x80) {
+                var exceptionCode = response[2];
+                return Q.reject("Modbus exception: " + exceptionCode);
+            }
+
+            self.validResponseCounter++;
+            fxLog.trace("RTU Transaction succeeded...");
+            return Q.resolve();
+        });
     }
 
     // Do transaction with modbus device (TCP version)
@@ -375,6 +549,17 @@ function fxModbusTCPMaster() {
         self.responseTimeout = timeout;
     }
 
+    // Set transparent mode (RTU over TCP - no MBAP header, use CRC instead)
+    this.setTransparentMode = function(enabled) {
+        m_TransparentMode = enabled;
+        fxLog.debug("FxModbusTCPMaster transparent mode " + (enabled ? "enabled" : "disabled"));
+    }
+
+    // Check if transparent mode is enabled
+    this.isTransparentMode = function() {
+        return m_TransparentMode;
+    }
+
     // Get transaction promise
     this.getTransactionPromise = function(deferred) {
         if (m_Closing === true) {
@@ -428,16 +613,45 @@ function fxModbusTCPMaster() {
         return deferred.promise;
     }
 
-    // CRC function (kept for API compatibility but returns dummy values for TCP)
-    this.getCRC = function (request, offset, length, crc) {
-        fxLog.trace("getCRC (TCP - no-op)...");
+    // CRC calculation for Modbus RTU frames
+    // Used in transparent mode when sending raw RTU frames over TCP
+    // NOTE: Third parameter is END INDEX (exclusive), NOT length!
+    // This matches FxModbusRTUMaster.getCRC behavior
+    this.getCRC = function (request, offset, endIndex, crc) {
+        fxLog.trace("getCRC (TCP)...");
+
         crc = crc || [0, 0];
+
+        // Standard CRC-16 Modbus calculation
+        var crcFull = 0xFFFF;
+        let crcHigh = 0xFF;
+        let crcLow = 0xFF;
+        var crcLSB;
+
+        // Loop from offset to endIndex (exclusive) - matches RTU version
+        for (let i = offset; i < endIndex; i++) {
+            crcFull = crcFull ^ request[i];
+            for (let j = 0; j < 8; j++) {
+                crcLSB = crcFull & 0x0001;
+                crcFull = (crcFull >> 1) & 0x7FFF;
+                if (crcLSB == 1)
+                    crcFull = crcFull ^ 0xA001;
+            }
+        }
+
+        // Return CRC values (low byte first, then high byte)
+        crcHigh = (crcFull >> 8) & 0xFF;
+        crc[1] = crcHigh;
+
+        crcLow = crcFull & 0xFF;
+        crc[0] = crcLow;
+
         return Q.resolve(crc);
     }
 
     // Function 16 - Write Multiple Registers
     this.writeMultipleRegisters = function(address, start_reg, reg_count, values) {
-        fxLog.debug("writeMultipleRegisters TCP... Address = " + address + ", Start = " + start_reg + ", Count = " + reg_count);
+        fxLog.debug("writeMultipleRegisters" + (m_TransparentMode ? " RTU" : " TCP") + "... Address = " + address + ", Start = " + start_reg + ", Count = " + reg_count);
 
         return (
             Q.resolve()
@@ -473,6 +687,20 @@ function fxModbusTCPMaster() {
                     pdu[7 + 2 * i] = values[i];
                 }
 
+                m_Response = Buffer.alloc(20);
+
+                // Transparent mode: use RTU format (Address + PDU + CRC)
+                if (m_TransparentMode) {
+                    // Expected response data: FC(1) + StartAddr(2) + Qty(2) = 5 bytes
+                    return doTransactionRTU(unitId, pdu, m_Response, 5, self.responseTimeout)
+                    .then(deferred.resolve)
+                    .fail(function(err) {
+                        deferred.reject(err);
+                        throw err;
+                    });
+                }
+
+                // TCP mode: use MBAP header
                 // If pass-through, prepend the pass-through address
                 if (is_pass_through) {
                     var passThroughPdu = Buffer.alloc(pduLength + 1);
@@ -485,9 +713,6 @@ function fxModbusTCPMaster() {
                 // Build MBAP header and combine with PDU
                 var mbapHeader = buildMBAPHeader(unitId, pdu.length);
                 m_Request = Buffer.concat([mbapHeader, pdu]);
-
-                // Response is 8 bytes (MBAP header response)
-                m_Response = Buffer.alloc(20);
 
                 return (
                     doTransaction(is_pass_through, m_Request, m_Response, 8, self.responseTimeout)
@@ -507,7 +732,7 @@ function fxModbusTCPMaster() {
 
     // Function 6 - Write Single Register
     this.writeSingleRegister = function (address, register, value) {
-        fxLog.debug("writeSingleRegister TCP... Address = " + address + ", Register = " + register + ", Data = " + value);
+        fxLog.debug("writeSingleRegister" + (m_TransparentMode ? " RTU" : " TCP") + "... Address = " + address + ", Register = " + register + ", Data = " + value);
 
         return (
             Q.resolve()
@@ -525,7 +750,7 @@ function fxModbusTCPMaster() {
                 var is_pass_through = (typeof(address) == 'object');
                 var unitId = (is_pass_through ? address[1] : address);
 
-                // Build PDU
+                // Build PDU: FC(1) + Register(2) + Value(2) = 5 bytes
                 var pdu = Buffer.alloc(5);
                 pdu[0] = 6; // Function code
                 pdu[1] = (register >> 8);
@@ -533,6 +758,21 @@ function fxModbusTCPMaster() {
                 pdu[3] = (value >> 8);
                 pdu[4] = value;
 
+                m_Response = Buffer.alloc(20);
+
+                // Transparent mode: use RTU format (Address + PDU + CRC)
+                if (m_TransparentMode) {
+                    // Note: pass-through not supported in transparent mode
+                    // Expected response data: FC(1) + Register(2) + Value(2) = 5 bytes
+                    return doTransactionRTU(unitId, pdu, m_Response, 5, self.responseTimeout)
+                    .then(deferred.resolve)
+                    .fail(function(err) {
+                        deferred.reject(err);
+                        throw err;
+                    });
+                }
+
+                // TCP mode: use MBAP header
                 if (is_pass_through) {
                     var passThroughPdu = Buffer.alloc(6);
                     passThroughPdu[0] = address[1];
@@ -543,7 +783,6 @@ function fxModbusTCPMaster() {
 
                 var mbapHeader = buildMBAPHeader(unitId, pdu.length);
                 m_Request = Buffer.concat([mbapHeader, pdu]);
-                m_Response = Buffer.alloc(20);
 
                 return (
                     doTransaction(is_pass_through, m_Request, m_Response, 8, self.responseTimeout)
@@ -563,7 +802,7 @@ function fxModbusTCPMaster() {
 
     // Function 3 - Read Holding Registers
     this.readHoldingRegisters = function (address, start_reg, reg_count, values) {
-        fxLog.debug("readHoldingRegisters TCP... Address = " + address + ", Start = " + start_reg + ", Count = " + reg_count);
+        fxLog.debug("readHoldingRegisters" + (m_TransparentMode ? " RTU" : " TCP") + "... Address = " + address + ", Start = " + start_reg + ", Count = " + reg_count);
 
         return (
             Q.resolve()
@@ -582,7 +821,7 @@ function fxModbusTCPMaster() {
                 var is_pass_through = (typeof(address) == 'object');
                 var unitId = (is_pass_through ? address[1] : address);
 
-                // Build PDU
+                // Build PDU: FC(1) + StartAddr(2) + RegCount(2) = 5 bytes
                 var pdu = Buffer.alloc(5);
                 pdu[0] = 3; // Function code
                 pdu[1] = (start_reg >> 8);
@@ -590,6 +829,28 @@ function fxModbusTCPMaster() {
                 pdu[3] = (reg_count >> 8);
                 pdu[4] = reg_count;
 
+                m_Response = Buffer.alloc(7 + 3 + 2 * reg_count);
+
+                // Transparent mode: use RTU format (Address + PDU + CRC)
+                if (m_TransparentMode) {
+                    // Expected response data: FC(1) + ByteCount(1) + Data(2*n) = 2 + 2*reg_count
+                    return doTransactionRTU(unitId, pdu, m_Response, 2 + 2 * reg_count, self.responseTimeout)
+                    .then(function() {
+                        // Copy response data to the value table
+                        // Response format: Address(1) + FC(1) + ByteCount(1) + Data(2*n)
+                        for (var i = 0; (i < reg_count) && (m_Response[1] === 3); i++) {
+                            values[i] = (m_Response[3 + (2 * i)] << 8);
+                            values[i] += m_Response[4 + (2 * i)];
+                        }
+                        deferred.resolve();
+                    })
+                    .fail(function(err) {
+                        deferred.reject(err);
+                        throw err;
+                    });
+                }
+
+                // TCP mode: use MBAP header
                 if (is_pass_through) {
                     var passThroughPdu = Buffer.alloc(6);
                     passThroughPdu[0] = address[1];
@@ -600,7 +861,6 @@ function fxModbusTCPMaster() {
 
                 var mbapHeader = buildMBAPHeader(unitId, pdu.length);
                 m_Request = Buffer.concat([mbapHeader, pdu]);
-                m_Response = Buffer.alloc(7 + 3 + 2 * reg_count); // MBAP + FC + byte count + data
 
                 return (
                     doTransaction(is_pass_through, m_Request, m_Response, 5 + 2 * reg_count, self.responseTimeout)

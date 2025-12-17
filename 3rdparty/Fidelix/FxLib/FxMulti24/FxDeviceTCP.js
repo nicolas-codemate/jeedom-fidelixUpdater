@@ -2,18 +2,29 @@
 // Based on FxDevice.js but uses TCP transport instead of RTU
 //
 // ============================================================================
-// LIMITATION: PROPRIETARY COMMANDS NOT SUPPORTED VIA TCP GATEWAYS
+// TCP CONNECTION MODES - TRANSPARENT MODE SUPPORT (IMPLEMENTED 2024-12-17)
 // ============================================================================
-// Functions like askBootVersion(), sendBootModeCommand(), sendPassThroughCommand(),
-// and setupFwProgramMode() use proprietary Fidelix commands ("Versio", "Passth",
-// "Progrb") that are NOT standard Modbus. These are sent as raw bytes.
+// This module supports two TCP connection modes controlled by setTransparentMode():
 //
-// These functions will NOT work through Modbus TCP gateways because:
-// 1. Gateways in "Modbus TCP to RTU" mode expect valid Modbus frames
-// 2. Gateways in "Transparent" mode require CRC checksums (not generated here)
+// 1. STANDARD MODE (m_TransparentMode = false)
+//    - For gateways in "Modbus TCP to RTU" mode (e.g., Waveshare Protocol="Modbus TCP to RTU")
+//    - Standard Modbus operations work (software update direct mode)
+//    - Proprietary commands (askBootVersion, sendPassThroughCommand, etc.) do NOT work
+//    - Firmware update is NOT available
 //
-// Only standard Modbus operations (readHoldingRegisters, writeSingleRegister,
-// writeMultipleRegisters) work via TCP gateways.
+// 2. TRANSPARENT MODE (m_TransparentMode = true)
+//    - For gateways in "None" (transparent/raw TCP) mode (e.g., Waveshare Protocol="None")
+//    - All frames use RTU format with CRC-16
+//    - Proprietary commands AND standard Modbus commands work
+//    - Firmware update IS available
+//
+// The setTransparentMode() method propagates to FxModbusTCPMaster, so both
+// proprietary commands (defined here) and standard Modbus commands (defined
+// in FxModbusTCPMaster.js) use RTU format with CRC.
+//
+// Usage:
+//   device.setTransparentMode(true);  // Enable before firmware update
+//   device.setTransparentMode(false); // Disable for standard Modbus TCP mode
 // ============================================================================
 'use strict'
 
@@ -36,6 +47,13 @@ const TCP_PROGRAMMING_MODE_DELAY = 3000;        // Delay after programming mode 
 const TCP_PROGRAMMING_MODE_RETRIES = 10;        // Number of retries for programming mode
 const TCP_PROGRAMMING_MODE_RETRY_DELAY = 2000;  // Delay between retries
 
+// Boot mode activation delays
+const TCP_BOOT_MODE_PRE_DELAY = 100;            // Delay before sending boot mode command
+const TCP_BOOT_MODE_POST_DELAY = 1500;          // Delay after boot mode command before retry
+const TCP_PASSTHROUGH_DELAY = 50;               // Delay for pass-through operations
+const TCP_REGISTER_WRITE_DELAY = 500;           // Delay after register write operations
+const TCP_SW_PROGRAMMING_DELAY = 50;            // Delay during software programming sequence
+
 // *******************************************************************
 // INTERFACE OBJECT
 // *******************************************************************
@@ -56,12 +74,32 @@ function fxDeviceTCP() {
     // PRIVATE VARIABLES
     // *******************************************************************
     var self = this;
+    var m_TransparentMode = false;  // When true, send raw RTU frames with CRC (for transparent TCP gateways)
+
+    // Save reference to parent class setTransparentMode before overriding
+    var parentSetTransparentMode = this.setTransparentMode;
 
     // *******************************************************************
     // PUBLIC VARIABLES
     // *******************************************************************
     this.targetModule = new fxModuleInfo();
     this.passThroughModule = new fxModuleInfo();
+
+    // Set transparent mode (raw RTU over TCP, with CRC)
+    // This propagates to FxModbusTCPMaster so standard Modbus commands also use RTU format
+    this.setTransparentMode = function(enabled) {
+        m_TransparentMode = enabled;
+        // Call parent class method to enable transparent mode for standard Modbus commands
+        if (parentSetTransparentMode) {
+            parentSetTransparentMode.call(self, enabled);
+        }
+        fxLog.debug("FxDeviceTCP transparent mode " + (enabled ? "enabled" : "disabled"));
+    };
+
+    // Check if transparent mode is enabled
+    this.isTransparentMode = function() {
+        return m_TransparentMode;
+    };
 
     // *******************************************************************
     // PRIVATE FUNCTIONS
@@ -128,7 +166,7 @@ function fxDeviceTCP() {
         var l_Buffer = new Buffer(20);
         var l_Offset = 1;
 
-        fxLog.trace("askBootVersion TCP... Address = " + address);
+        fxLog.trace("askBootVersion TCP... Address = " + address + ", TransparentMode = " + m_TransparentMode);
 
         return (
             Q.fcall(function() {
@@ -152,16 +190,42 @@ function fxDeviceTCP() {
                     l_Offset = 0;
                 }
 
-                self.write(l_Buffer, l_Offset, (9 - l_Offset))
-                .then(function() {
-                    var l_PatternToWait = new Buffer(2);
-                    l_PatternToWait[0] = l_Buffer[1];
-                    l_PatternToWait.write('V', 1);
+                var frameLength = 9 - l_Offset;
 
-                    return (tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, TCP_WAIT_PATTERN_TIMEOUT))
-                })
-                .then(deferred.resolve)
-                .catch(deferred.reject)
+                // In transparent mode, add CRC to the frame
+                if (m_TransparentMode) {
+                    self.getCRC(l_Buffer, l_Offset, frameLength)
+                    .then(function(crc) {
+                        l_Buffer[l_Offset + frameLength] = crc[0];
+                        l_Buffer[l_Offset + frameLength + 1] = crc[1];
+                        return self.write(l_Buffer, l_Offset, frameLength + 2);
+                    })
+                    .then(function() {
+                        var l_PatternToWait = new Buffer(2);
+                        l_PatternToWait[0] = l_Buffer[1];
+                        l_PatternToWait.write('V', 1);
+                        // Note: Versio response is proprietary and does NOT include CRC
+                        // Response format: Address(1) + 'V' + version(4) = 6 bytes total
+                        return tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, TCP_WAIT_PATTERN_TIMEOUT);
+                    })
+                    .then(function() {
+                        deferred.resolve();
+                    })
+                    .catch(function(err) {
+                        deferred.reject(err);
+                    });
+                } else {
+                    // Standard mode (Modbus TCP gateway handles framing)
+                    self.write(l_Buffer, l_Offset, frameLength)
+                    .then(function() {
+                        var l_PatternToWait = new Buffer(2);
+                        l_PatternToWait[0] = l_Buffer[1];
+                        l_PatternToWait.write('V', 1);
+                        return tryReadPattern(l_Buffer, l_PatternToWait, 2, 0, 4, TCP_WAIT_PATTERN_TIMEOUT);
+                    })
+                    .then(deferred.resolve)
+                    .catch(deferred.reject);
+                }
 
                 return deferred.promise;
             })
@@ -185,7 +249,7 @@ function fxDeviceTCP() {
         var l_Buffer = new Buffer(20);
         var l_Offset = 1;
 
-        fxLog.trace("sendPassThroughCommand TCP...");
+        fxLog.trace("sendPassThroughCommand TCP... TransparentMode = " + m_TransparentMode);
 
         return (
             Q.fcall(function() {
@@ -196,16 +260,37 @@ function fxDeviceTCP() {
                 l_Buffer[1] = self.passThroughModule.address;
                 l_Buffer.write('Passth\0', 2);
 
-                self.write(l_Buffer, l_Offset, (9 - l_Offset))
-                .then(function() {
-                    var l_PatternToWait = new Buffer(3);
-                    l_PatternToWait[0] = l_Buffer[1];
-                    l_PatternToWait.write('OK', 1);
+                var frameLength = 9 - l_Offset;
 
-                    return (tryReadPattern(l_Buffer, l_PatternToWait, 3, 0, 0, TCP_WAIT_PATTERN_TIMEOUT))
-                })
-                .then(deferred.resolve)
-                .catch(deferred.reject)
+                // In transparent mode, add CRC to the frame
+                if (m_TransparentMode) {
+                    self.getCRC(l_Buffer, l_Offset, frameLength)
+                    .then(function(crc) {
+                        l_Buffer[l_Offset + frameLength] = crc[0];
+                        l_Buffer[l_Offset + frameLength + 1] = crc[1];
+                        return self.write(l_Buffer, l_Offset, frameLength + 2);
+                    })
+                    .then(function() {
+                        var l_PatternToWait = new Buffer(3);
+                        l_PatternToWait[0] = l_Buffer[1];
+                        l_PatternToWait.write('OK', 1);
+                        // Note: Passth response is proprietary and does NOT include CRC
+                        return tryReadPattern(l_Buffer, l_PatternToWait, 3, 0, 0, TCP_WAIT_PATTERN_TIMEOUT);
+                    })
+                    .then(deferred.resolve)
+                    .catch(deferred.reject);
+                } else {
+                    // Standard mode (Modbus TCP gateway handles framing)
+                    self.write(l_Buffer, l_Offset, frameLength)
+                    .then(function() {
+                        var l_PatternToWait = new Buffer(3);
+                        l_PatternToWait[0] = l_Buffer[1];
+                        l_PatternToWait.write('OK', 1);
+                        return tryReadPattern(l_Buffer, l_PatternToWait, 3, 0, 0, TCP_WAIT_PATTERN_TIMEOUT);
+                    })
+                    .then(deferred.resolve)
+                    .catch(deferred.reject);
+                }
 
                 return deferred.promise;
             })
@@ -234,7 +319,7 @@ function fxDeviceTCP() {
                 return (
                     Q.resolve()
                     .then(Q.fbind(self.writeSingleRegister, [l_PassThroughAddress, l_ModuleAddress], moduleinfo.bootloaderStartRegister, 0xFFFF))
-                    .delay(500)
+                    .delay(TCP_REGISTER_WRITE_DELAY)
                     .then(Q.fbind(self.writeSingleRegister, [l_PassThroughAddress, l_ModuleAddress], moduleinfo.bootloaderStartRegister, 0x5555))
                 )
             })
@@ -258,9 +343,9 @@ function fxDeviceTCP() {
                 askBootVersion(self.passThroughModule.address)
                 .fail(function() {
                     return (
-                        Q.delay(50)
+                        Q.delay(TCP_BOOT_MODE_PRE_DELAY)
                         .then(Q.fbind(sendBootModeCommand, true))
-                        .delay(500)
+                        .delay(TCP_BOOT_MODE_POST_DELAY)
                         .then(Q.fbind(askBootVersion, self.passThroughModule.address))
                     )
                 })
@@ -270,9 +355,9 @@ function fxDeviceTCP() {
                     }
                     return (Q.resolve(version));
                 })
-                .delay(50)
+                .delay(TCP_PASSTHROUGH_DELAY)
                 .then(sendPassThroughCommand)
-                .delay(50)
+                .delay(TCP_PASSTHROUGH_DELAY)
                 .catch(Q.reject)
             )
         }
@@ -280,12 +365,14 @@ function fxDeviceTCP() {
         function setupTargetDevice() {
             return (
                 askBootVersion([self.passThroughModule.address, self.targetModule.address])
-                .fail(function() {
+                .fail(function(err) {
                     return (
-                        Q.delay(50)
+                        Q.delay(TCP_BOOT_MODE_PRE_DELAY)
                         .then(Q.fbind(sendBootModeCommand, false))
-                        .delay(500)
-                        .then(Q.fbind(askBootVersion, [self.passThroughModule.address, self.targetModule.address]))
+                        .delay(TCP_BOOT_MODE_POST_DELAY)
+                        .then(function() {
+                            return askBootVersion([self.passThroughModule.address, self.targetModule.address]);
+                        })
                     )
                 })
                 .then(function(version) {
@@ -324,12 +411,12 @@ function fxDeviceTCP() {
 
         return (
             self.readHoldingRegisters([self.passThroughModule.address, self.targetModule.address], 0xFF3E, 2, l_Values)
-            .delay(50)
+            .delay(TCP_SW_PROGRAMMING_DELAY)
             .then(function() {
                 if ((l_Values[0] == 0xAAAA) || (l_Values[1] == 0)) {
                     l_Values[0] = 0xFFFF;
                     l_Values[1] = 0xFFFF;
-                    return (self.writeMultipleRegisters([self.passThroughModule.address, self.targetModule.address], 0xFF3E, 2, l_Values).delay(500).thenResolve());
+                    return (self.writeMultipleRegisters([self.passThroughModule.address, self.targetModule.address], 0xFF3E, 2, l_Values).delay(TCP_REGISTER_WRITE_DELAY).thenResolve());
                 }
             })
             .then(Q.fbind(self.writeSingleRegister, [self.passThroughModule.address, self.targetModule.address], 0xFF3E, 0xAAAA))
@@ -435,7 +522,7 @@ function fxDeviceTCP() {
 
         return (
             self.writeSingleRegister([self.passThroughModule.address, self.targetModule.address], 0xFF3E, 0xBBBB)
-            .delay(500)
+            .delay(TCP_REGISTER_WRITE_DELAY)
             .then(Q.fbind(self.readHoldingRegisters, [self.passThroughModule.address, self.targetModule.address], 0xFF3F, 1, l_Values))
             .then(function() {
                 if (l_Values[0] == 0x2222)
@@ -458,7 +545,7 @@ function fxDeviceTCP() {
         var l_Buffer = new Buffer(20);
         var l_Offset = 1;
 
-        fxLog.trace("setupFwProgramMode TCP...");
+        fxLog.trace("setupFwProgramMode TCP... TransparentMode = " + m_TransparentMode);
 
         return (
             Q.fcall(function() {
@@ -475,12 +562,32 @@ function fxDeviceTCP() {
                     l_Offset = 0;
                 }
 
-                self.write(l_Buffer, l_Offset, 10 - l_Offset)
-                .then(self.getFwPageAddress)
-                .then(function(pageAddress) {
-                    deferred.resolve(pageAddress);
-                })
-                .catch(deferred.reject)
+                var frameLength = 10 - l_Offset;
+
+                // In transparent mode, add CRC to the frame
+                if (m_TransparentMode) {
+                    self.getCRC(l_Buffer, l_Offset, frameLength)
+                    .then(function(crc) {
+                        l_Buffer[l_Offset + frameLength] = crc[0];
+                        l_Buffer[l_Offset + frameLength + 1] = crc[1];
+                        return self.write(l_Buffer, l_Offset, frameLength + 2);
+                    })
+                    .then(self.getFwPageAddress)
+                    .then(function(pageAddress) {
+                        deferred.resolve(pageAddress);
+                    })
+                    .catch(function(err) {
+                        deferred.reject(err);
+                    });
+                } else {
+                    // Standard mode
+                    self.write(l_Buffer, l_Offset, frameLength)
+                    .then(self.getFwPageAddress)
+                    .then(function(pageAddress) {
+                        deferred.resolve(pageAddress);
+                    })
+                    .catch(deferred.reject);
+                }
 
                 return deferred.promise;
             })
@@ -540,26 +647,37 @@ function fxDeviceTCP() {
             })
             .then(function() {
                 var l_PageSize = pageData.length;
+                // Buffer format (same as serial): addr + pageData + CRC
+                // Direct mode: 1 + 256 + 2 = 259 bytes
+                // Passthrough: 2 + 256 + 2 = 260 bytes
                 var l_Buffer = new Buffer(l_PageSize + 4);
 
                 l_Buffer[0] = self.passThroughModule.address;
                 l_Buffer[1] = self.targetModule.address;
 
+                // Copy page data directly (no page address in frame - it's tracked by device)
                 pageData.copy(l_Buffer, 2);
 
                 return (
+                    // CRC calculation: from device address to end of page data
+                    // Note: third param is END index (exclusive), not length
+                    // So l_PageSize + 2 = 258, processes positions 1-257 (257 bytes)
                     self.getCRC(l_Buffer, 1, l_PageSize + 2)
                     .then(function(CRC) {
-                        l_Buffer[l_PageSize + 2] = CRC[1];
-                        l_Buffer[l_PageSize + 3] = CRC[0];
+                        // CRC format: HIGH byte first, LOW byte second (matches serial FxDevice.js)
+                        l_Buffer[l_PageSize + 2] = CRC[1];  // high byte
+                        l_Buffer[l_PageSize + 3] = CRC[0];  // low byte
                     })
                     .then(function() {
                         if (self.passThroughModule.address != 0) {
                             l_Buffer[1]++;
                             return self.write(l_Buffer, 0, l_PageSize + 4);
                         }
-                        else
+                        else {
+                            // Direct mode: skip passThroughModule.address (position 0)
+                            // Send: addr(1) + pageData(256) + CRC(2) = 259 bytes
                             return self.write(l_Buffer, 1, l_PageSize + 3);
+                        }
                     })
                 )
             })

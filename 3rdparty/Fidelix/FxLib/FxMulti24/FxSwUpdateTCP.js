@@ -2,19 +2,22 @@
 // Based on FxSwUpdate.js but uses TCP transport
 //
 // ============================================================================
-// LIMITATION: PASS-THROUGH MODE NOT SUPPORTED VIA TCP
+// TCP CONNECTION MODES
 // ============================================================================
-// Software updates work via TCP ONLY in direct mode (no pass-through).
-// When passThroughModule.address !== 0, the code calls setupBootMode() which
-// uses proprietary Fidelix commands ("Versio", "Passth") that are not
-// compatible with Modbus TCP gateways.
+// This module supports two TCP connection modes:
 //
-// Summary of TCP support:
-// - Direct software update (no subaddress): WORKS
-// - Pass-through software update (with subaddress): DOES NOT WORK
-// - Firmware update (any mode): DOES NOT WORK (see FxFwUpdateTCP.js)
+// 1. TCP MODBUS MODE (transparentMode: false)
+//    - Gateway configured as "Modbus TCP to RTU"
+//    - Only direct software update works (no pass-through)
+//    - Uses standard Modbus register operations
 //
-// The UI should disable the subaddress field when TCP is selected.
+// 2. TCP TRANSPARENT MODE (transparentMode: true)
+//    - Gateway configured as "None" (transparent/raw TCP)
+//    - All features supported including pass-through
+//    - CRC is calculated and added to proprietary commands
+//
+// To use transparent mode, set options.transparentMode = true when calling
+// the program() function. The UI provides "TCP Transparent" option for this.
 // ============================================================================
 'use strict'
 
@@ -287,6 +290,12 @@ function fxSwUpdateTCP() {
             m_Options = options || {};
             m_Options.responseTimeout = TCP_RESPONSE_TIMEOUT;
             m_FileBuffer = new Buffer( new Uint8Array(options.data) );
+
+            // Enable transparent mode if requested (for raw RTU over TCP)
+            if (m_Options.transparentMode) {
+                self.setTransparentMode(true);
+                fxLog.debug("Transparent mode enabled for software update");
+            }
 
             m_Deferred = Q.defer();
 

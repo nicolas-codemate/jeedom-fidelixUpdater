@@ -77,8 +77,10 @@ if (!isConnect('admin')) {
                 <label>{{Type de connexion}}</label>
                 <select class="form-control" id="connectionType">
                     <option value="rtu">{{Série RTU}} (USB/RS485)</option>
-                    <option value="tcp">{{TCP/IP}} (Ethernet/Waveshare)</option>
+                    <option value="tcp">{{TCP Modbus}} (Convertisseur en mode Modbus TCP)</option>
+                    <option value="tcp-transparent">{{TCP Transparent}} (Convertisseur en mode None/Raw)</option>
                 </select>
+                <small class="text-muted" id="connectionTypeHelp"></small>
             </div>
 
             <!-- RTU Connection Options -->
@@ -325,14 +327,25 @@ $(function() {
 
     // Function to update firmware and pass-through availability based on connection type
     function updateTcpLimitations(connectionType) {
-        const isTcp = (connectionType === 'tcp');
+        const isTcpModbus = (connectionType === 'tcp');
+        const isTcpTransparent = (connectionType === 'tcp-transparent');
+        const isRtu = (connectionType === 'rtu');
         const firmwareOption = $('#updateType option[value="m24firmware"]');
         const currentUpdateType = $('#updateType').val();
 
-        if (isTcp) {
-            // Disable firmware option in TCP mode
+        // Update help text based on connection type
+        if (isTcpModbus) {
+            $('#connectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "Modbus TCP to RTU". Seul le software update direct est supporté.}}');
+        } else if (isTcpTransparent) {
+            $('#connectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "None" (Transparent). Toutes les fonctionnalités sont supportées.}}');
+        } else {
+            $('#connectionTypeHelp').text('');
+        }
+
+        if (isTcpModbus) {
+            // TCP Modbus mode: Disable firmware and pass-through
             firmwareOption.prop('disabled', true);
-            firmwareOption.text('{{Firmware Multi24}} (.hex) - {{RTU uniquement}}');
+            firmwareOption.text('{{Firmware Multi24}} (.hex) - {{TCP Transparent ou RTU uniquement}}');
 
             // If firmware was selected, switch to software
             if (currentUpdateType === 'm24firmware') {
@@ -340,17 +353,17 @@ $(function() {
                 $('#tcpFirmwareWarning').show();
             }
 
-            // Disable pass-through (subaddress) in TCP mode
+            // Disable pass-through (subaddress)
             $('#deviceSubaddress').prop('disabled', true).val('');
             $('#subaddressHelp').hide();
             $('#subaddressTcpWarning').show();
         } else {
-            // Enable firmware option in RTU mode
+            // RTU or TCP Transparent mode: Enable all features
             firmwareOption.prop('disabled', false);
             firmwareOption.text('{{Firmware Multi24}} (.hex)');
             $('#tcpFirmwareWarning').hide();
 
-            // Enable pass-through (subaddress) in RTU mode
+            // Enable pass-through (subaddress)
             $('#deviceSubaddress').prop('disabled', false);
             $('#subaddressHelp').show();
             $('#subaddressTcpWarning').hide();
@@ -361,7 +374,7 @@ $(function() {
     const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
     if (savedConnectionType) {
         $('#connectionType').val(savedConnectionType);
-        if (savedConnectionType === 'tcp') {
+        if (savedConnectionType === 'tcp' || savedConnectionType === 'tcp-transparent') {
             $('#rtuOptions').hide();
             $('#tcpOptions').show();
         }
@@ -372,7 +385,7 @@ $(function() {
     $('#connectionType').on('change', function() {
         const connectionType = $(this).val();
         localStorage.setItem('fidelixUpdater_connectionType', connectionType);
-        if (connectionType === 'tcp') {
+        if (connectionType === 'tcp' || connectionType === 'tcp-transparent') {
             $('#rtuOptions').hide();
             $('#tcpOptions').show();
         } else {
@@ -437,8 +450,9 @@ $(function() {
         let baudRate = null;
         let tcpHost = null;
         let tcpPort = null;
+        const isTcpConnection = (connectionType === 'tcp' || connectionType === 'tcp-transparent');
 
-        if (connectionType === 'tcp') {
+        if (isTcpConnection) {
             tcpHost = $('#tcpHost').val();
             tcpPort = parseInt($('#tcpPort').val());
 
@@ -471,18 +485,24 @@ $(function() {
         $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> {{Démarrage...}}');
 
         // Prepare AJAX data
+        // For backend, use 'tcp' as connectionType for both TCP modes
+        const backendConnectionType = isTcpConnection ? 'tcp' : 'rtu';
         const ajaxData = {
             action: 'startUpdate',
             address: address,
-            connectionType: connectionType,
+            connectionType: backendConnectionType,
             filename: uploadedFilename,
             method: method
         };
 
         // Add connection-specific parameters
-        if (connectionType === 'tcp') {
+        if (isTcpConnection) {
             ajaxData.tcpHost = tcpHost;
             ajaxData.tcpPort = tcpPort;
+            // Add transparent mode flag for TCP Transparent
+            if (connectionType === 'tcp-transparent') {
+                ajaxData.transparentMode = true;
+            }
         } else {
             ajaxData.port = port;
             ajaxData.baudRate = baudRate;

@@ -17,6 +17,14 @@
 
 require_once dirname(__FILE__) . '/../../../../core/php/core.inc.php';
 
+// Define POSIX signal constants if PCNTL extension is not available
+if (!defined('SIGTERM')) {
+    define('SIGTERM', 15);
+}
+if (!defined('SIGKILL')) {
+    define('SIGKILL', 9);
+}
+
 class fidelixUpdater extends eqLogic {
     /*     * *************************Attributs****************************** */
 
