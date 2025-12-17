@@ -18,7 +18,7 @@ $history = fidelixUpdater::getProcessHistory(50);
         <table class="table table-condensed table-striped">
             <thead>
                 <tr>
-                    <th style="width:130px">{{Port}}</th>
+                    <th style="width:160px">{{Connexion}}</th>
                     <th style="width:90px">{{Type}}</th>
                     <th style="width:100px">{{Utilisateur}}</th>
                     <th style="width:90px">{{Adresse}}</th>
@@ -47,7 +47,16 @@ $history = fidelixUpdater::getProcessHistory(50);
                         $statusLabel = 'Arrêté';
                     }
 
-                    $portShort = basename($process['port']);
+                    // Build connection info based on type
+                    $connectionType = isset($process['connectionType']) ? $process['connectionType'] : 'rtu';
+                    if ($connectionType === 'tcp') {
+                        $tcpHost = isset($process['tcpHost']) ? $process['tcpHost'] : '-';
+                        $tcpPort = isset($process['tcpPort']) ? $process['tcpPort'] : '-';
+                        $connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' . htmlspecialchars($tcpHost) . ':' . htmlspecialchars($tcpPort);
+                    } else {
+                        $portShort = isset($process['port']) ? basename($process['port']) : '-';
+                        $connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' . htmlspecialchars($portShort);
+                    }
                     $typeLabel = $process['type'] === 'm24firmware' ? 'Firmware' : 'Software';
                     $addressLabel = $process['address'];
                     if (!empty($process['subaddress'])) {
@@ -84,7 +93,7 @@ $history = fidelixUpdater::getProcessHistory(50);
                     }
                     ?>
                     <tr>
-                        <td><?php echo $portShort; ?></td>
+                        <td><?php echo $connectionInfo; ?></td>
                         <td><?php echo $typeLabel; ?></td>
                         <td><?php echo isset($process['username']) ? $process['username'] : '-'; ?></td>
                         <td><?php echo $addressLabel; ?></td>

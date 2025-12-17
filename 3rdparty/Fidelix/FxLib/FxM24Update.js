@@ -14,6 +14,8 @@ const path = require('path');
 const fxLog = require('./FxUtils/').fxLog.configure({modulename: __filename});
 const fxSwUpdate = require('./FxMulti24/').fxSwUpdate();
 const fxFwUpdate = require('./FxMulti24/').fxFwUpdate();
+const fxSwUpdateTCP = require('./FxMulti24/').fxSwUpdateTCP();
+const fxFwUpdateTCP = require('./FxMulti24/').fxFwUpdateTCP();
 
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
@@ -185,23 +187,50 @@ function fxM24Update() {
       if (options.address === undefined){
         console.log('multi24update: No module address defined...')
         throw('multi24update: No module address defined...');
-      }          
+      }
 
-      if ((options.type === 'm24software') || (options.type === 'm24firmware')) {  
-        device = (options.type === 'm24software') ? fxSwUpdate : fxFwUpdate;
+      // Determine connection type (RTU by default, TCP if specified)
+      // Note: 'tcp-transparent' is also TCP, just with transparent/raw mode enabled
+      const isTCP = options.connectionType === 'tcp' || options.connectionType === 'tcp-transparent';
+
+      if (isTCP) {
+        // Validate TCP options
+        if (!options.host) {
+          throw('multi24update: No TCP host defined for TCP connection');
+        }
+        if (!options.tcpPort) {
+          throw('multi24update: No TCP port defined for TCP connection');
+        }
+        console.log('multi24update: Using TCP connection to ' + options.host + ':' + options.tcpPort);
+      } else {
+        console.log('multi24update: Using RTU connection on port ' + options.port);
+      }
+
+      if ((options.type === 'm24software') || (options.type === 'm24firmware')) {
+        // Select RTU or TCP device based on connection type
+        if (isTCP) {
+          device = (options.type === 'm24software') ? fxSwUpdateTCP : fxFwUpdateTCP;
+        } else {
+          device = (options.type === 'm24software') ? fxSwUpdate : fxFwUpdate;
+        }
         device.targetModule.address = options.subaddress || options.address;
         device.passThroughModule.address = options.subaddress ? options.address : 0;
         device.targetModule.type = 'MULTI-24';
         device.passThroughModule.type = options.subaddress ? 'MULTI-24' : '';
-      } 
+      }
       else if ((options.type === 'displayfirmware') || (options.type === 'displaygraphics')) {
-        device = (options.type === 'displaygraphics') ? fxSwUpdate : fxFwUpdate;      
+        // Select RTU or TCP device based on connection type
+        if (isTCP) {
+          device = (options.type === 'displaygraphics') ? fxSwUpdateTCP : fxFwUpdateTCP;
+        } else {
+          device = (options.type === 'displaygraphics') ? fxSwUpdate : fxFwUpdate;
+        }
         device.targetModule.address = options.subaddress || options.address;
         device.passThroughModule.address = options.subaddress ? options.address : 0;
         device.targetModule.type = 'DISPLAY';
         device.passThroughModule.type = options.subaddress ? 'MULTI-24' : '';
-      } 
-      else 
+      }
+      else
         throw('multi24update: No module type provided...');
     }
     catch (err) {
@@ -223,20 +252,12 @@ function fxM24Update() {
       });
     }
 
-    if (device === fxFwUpdate) {
-      fxFwUpdate.on("open",open);
-      fxFwUpdate.on("close", close);
-      fxFwUpdate.on("disconnect",disconnect);
-      fxFwUpdate.on("error",error);
-      fxFwUpdate.on("progress",progress);
-    }
-    else { // fxSwUpdate
-      fxSwUpdate.on("open",open);
-      fxSwUpdate.on("close", close);
-      fxSwUpdate.on("disconnect",disconnect);
-      fxSwUpdate.on("error",error);
-      fxSwUpdate.on("progress",progress);
-    }
+    // Set up event handlers for the selected device (works for both RTU and TCP)
+    device.on("open", open);
+    device.on("close", close);
+    device.on("disconnect", disconnect);
+    device.on("error", error);
+    device.on("progress", progress);
 
     var deferred = Q.defer();
     

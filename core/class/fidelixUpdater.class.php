@@ -17,6 +17,14 @@
 
 require_once dirname(__FILE__) . '/../../../../core/php/core.inc.php';
 
+// Define POSIX signal constants if PCNTL extension is not available
+if (!defined('SIGTERM')) {
+    define('SIGTERM', 15);
+}
+if (!defined('SIGKILL')) {
+    define('SIGKILL', 9);
+}
+
 class fidelixUpdater extends eqLogic {
     /*     * *************************Attributs****************************** */
 
@@ -223,7 +231,10 @@ class fidelixUpdater extends eqLogic {
         $process = array(
             'updateId' => $processData['updateId'],
             'pid' => $processData['pid'],
-            'port' => $processData['port'],
+            'connectionType' => isset($processData['connectionType']) ? $processData['connectionType'] : 'rtu',
+            'port' => isset($processData['port']) ? $processData['port'] : null,
+            'tcpHost' => isset($processData['tcpHost']) ? $processData['tcpHost'] : null,
+            'tcpPort' => isset($processData['tcpPort']) ? $processData['tcpPort'] : null,
             'address' => $processData['address'],
             'subaddress' => isset($processData['subaddress']) ? $processData['subaddress'] : null,
             'type' => $processData['type'],

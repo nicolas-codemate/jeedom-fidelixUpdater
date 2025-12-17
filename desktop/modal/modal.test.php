@@ -31,39 +31,67 @@ if (!isConnect('admin')) {
     <div class="row" id="testConfigSection">
         <div class="col-lg-6">
             <div class="form-group">
-                <label>{{Port série}}</label>
-                <select class="form-control" id="testSerialPort">
-                    <?php
-                    // Load helper class
-                    require_once dirname(__FILE__) . '/../../core/class/fidelixUpdaterHelper.class.php';
-
-                    // Get serial ports with normalized [port => description] mapping
-                    $serialPorts = fidelixUpdaterHelper::getSerialPorts(true);
-                    if (is_array($serialPorts)) {
-                        foreach ($serialPorts as $port => $description) {
-                            // Display: /dev/ttyS0 (Cubiboard)
-                            echo '<option value="' . htmlspecialchars($port) . '">' . htmlspecialchars($port) . ' (' . htmlspecialchars($description) . ')</option>';
-                        }
-                    }
-                    ?>
-                </select>
-            </div>
-
-            <div class="form-group">
                 <label>{{Adresse du module Modbus}} (1-247)</label>
                 <input type="number" class="form-control" id="testDeviceAddress" min="1" max="247" value="1" placeholder="1">
             </div>
 
             <div class="form-group">
-                <label>{{Vitesse de communication (Baud Rate)}}</label>
-                <select class="form-control" id="testBaudRate">
-                    <option value="9600">9600</option>
-                    <option value="19200">19200</option>
-                    <option value="38400" selected>38400</option>
-                    <option value="57600">57600</option>
-                    <option value="115200">115200</option>
+                <label>{{Type de connexion}}</label>
+                <select class="form-control" id="testConnectionType">
+                    <option value="rtu">{{Série RTU}} (USB/RS485)</option>
+                    <option value="tcp">{{TCP Modbus}} (Convertisseur en mode Modbus TCP)</option>
+                    <option value="tcp-transparent">{{TCP Transparent}} (Convertisseur en mode None/Raw)</option>
                 </select>
-                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
+                <small class="text-muted" id="testConnectionTypeHelp"></small>
+            </div>
+
+            <!-- RTU Connection Options -->
+            <div id="testRtuOptions">
+                <div class="form-group">
+                    <label>{{Port série}}</label>
+                    <select class="form-control" id="testSerialPort">
+                        <?php
+                        // Load helper class
+                        require_once dirname(__FILE__) . '/../../core/class/fidelixUpdaterHelper.class.php';
+
+                        // Get serial ports with normalized [port => description] mapping
+                        $serialPorts = fidelixUpdaterHelper::getSerialPorts(true);
+                        if (is_array($serialPorts)) {
+                            foreach ($serialPorts as $port => $description) {
+                                // Display: /dev/ttyS0 (Cubiboard)
+                                echo '<option value="' . htmlspecialchars($port) . '">' . htmlspecialchars($port) . ' (' . htmlspecialchars($description) . ')</option>';
+                            }
+                        }
+                        ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>{{Vitesse de communication (Baud Rate)}}</label>
+                    <select class="form-control" id="testBaudRate">
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400" selected>38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                    <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
+                </div>
+            </div>
+
+            <!-- TCP Connection Options -->
+            <div id="testTcpOptions" style="display: none;">
+                <div class="form-group">
+                    <label>{{Adresse IP du convertisseur}}</label>
+                    <input type="text" class="form-control" id="testTcpHost" placeholder="192.168.1.100">
+                    <small class="text-muted">{{Adresse IP du convertisseur Modbus TCP (ex: Waveshare)}}</small>
+                </div>
+
+                <div class="form-group">
+                    <label>{{Port TCP}}</label>
+                    <input type="number" class="form-control" id="testTcpPort" min="1" max="65535" value="502" placeholder="502">
+                    <small class="text-muted">{{Port TCP du convertisseur (4196 par défaut pour Waveshare, 502 pour Modbus standard)}}</small>
+                </div>
             </div>
 
             <div class="form-group">
@@ -79,8 +107,9 @@ if (!isConnect('admin')) {
                 <p>{{Ce test vérifie :}}</p>
                 <ul>
                     <li>{{Installation de Node.js}}</li>
-                    <li>{{Permissions du port série (www-data dans groupe dialout)}}</li>
-                    <li>{{Connexion Modbus RTU au module}}</li>
+                    <li id="testInfoRtu">{{Permissions du port série (www-data dans groupe dialout)}}</li>
+                    <li id="testInfoTcp" style="display: none;">{{Connectivité réseau TCP vers le convertisseur}}</li>
+                    <li>{{Connexion Modbus au module}}</li>
                     <li>{{Communication avec le module à l'adresse spécifiée}}</li>
                 </ul>
                 <p class="small">{{Le test prend environ 5-10 secondes.}}</p>
@@ -107,15 +136,23 @@ if (!isConnect('admin')) {
                                 <td id="diag-nodejs"></td>
                             </tr>
                             <tr>
+                                <td><strong>{{Type de connexion}}</strong></td>
+                                <td id="diag-connectionType"></td>
+                            </tr>
+                            <tr id="diag-port-row">
                                 <td><strong>{{Port série}}</strong></td>
                                 <td id="diag-port"></td>
                             </tr>
-                            <tr>
+                            <tr id="diag-permissions-row">
                                 <td><strong>{{Permissions}}</strong></td>
                                 <td id="diag-permissions"></td>
                             </tr>
+                            <tr id="diag-tcp-row" style="display: none;">
+                                <td><strong>{{Convertisseur TCP}}</strong></td>
+                                <td id="diag-tcp"></td>
+                            </tr>
                             <tr>
-                                <td><strong>{{Port ouvert}}</strong></td>
+                                <td><strong>{{Connexion ouverte}}</strong></td>
                                 <td id="diag-portOpened"></td>
                             </tr>
                             <tr>
@@ -155,21 +192,101 @@ if (!isConnect('admin')) {
 
 <script>
 $(function() {
-    // Run test button handler
-    $('#btnRunTest').on('click', function() {
-        const port = $('#testSerialPort').val();
-        const address = parseInt($('#testDeviceAddress').val());
-        const baudRate = parseInt($('#testBaudRate').val());
+    // Helper function to update UI based on connection type
+    function updateConnectionTypeUI(connectionType) {
+        const isTCP = (connectionType === 'tcp' || connectionType === 'tcp-transparent');
 
-        // Validate inputs
-        if (!port) {
-            $('#notify').showAlert({message: '{{Veuillez sélectionner un port série}}', level: 'warning'});
-            return;
+        if (isTCP) {
+            $('#testRtuOptions').hide();
+            $('#testTcpOptions').show();
+            $('#testInfoRtu').hide();
+            $('#testInfoTcp').show();
+        } else {
+            $('#testRtuOptions').show();
+            $('#testTcpOptions').hide();
+            $('#testInfoRtu').show();
+            $('#testInfoTcp').hide();
         }
 
+        // Update help text
+        if (connectionType === 'tcp') {
+            $('#testConnectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "Modbus TCP to RTU".}}');
+        } else if (connectionType === 'tcp-transparent') {
+            $('#testConnectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "None" (Transparent/Raw).}}');
+        } else {
+            $('#testConnectionTypeHelp').text('');
+        }
+    }
+
+    // Restore connection type from localStorage
+    const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
+    if (savedConnectionType) {
+        $('#testConnectionType').val(savedConnectionType);
+        updateConnectionTypeUI(savedConnectionType);
+    }
+
+    // Connection type change handler
+    $('#testConnectionType').on('change', function() {
+        const connectionType = $(this).val();
+        localStorage.setItem('fidelixUpdater_connectionType', connectionType);
+        updateConnectionTypeUI(connectionType);
+    });
+
+    // Run test button handler
+    $('#btnRunTest').on('click', function() {
+        const connectionType = $('#testConnectionType').val();
+        const address = parseInt($('#testDeviceAddress').val());
+
+        // Validate address
         if (!address || address < 1 || address > 247) {
             $('#notify').showAlert({message: '{{Adresse invalide (doit être entre 1 et 247)}}', level: 'warning'});
             return;
+        }
+
+        // Prepare AJAX data
+        const ajaxData = {
+            action: 'testConnection',
+            connectionType: connectionType,
+            address: address
+        };
+
+        // Validate and add connection-specific parameters
+        const isTcpConnection = (connectionType === 'tcp' || connectionType === 'tcp-transparent');
+
+        if (isTcpConnection) {
+            const tcpHost = $('#testTcpHost').val();
+            const tcpPort = parseInt($('#testTcpPort').val());
+
+            if (!tcpHost) {
+                $('#notify').showAlert({message: '{{Veuillez saisir l\'adresse IP du convertisseur}}', level: 'warning'});
+                return;
+            }
+
+            // Basic IP validation
+            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipRegex.test(tcpHost)) {
+                $('#notify').showAlert({message: '{{Adresse IP invalide}}', level: 'warning'});
+                return;
+            }
+
+            if (!tcpPort || tcpPort < 1 || tcpPort > 65535) {
+                $('#notify').showAlert({message: '{{Port TCP invalide (doit être entre 1 et 65535)}}', level: 'warning'});
+                return;
+            }
+
+            ajaxData.tcpHost = tcpHost;
+            ajaxData.tcpPort = tcpPort;
+        } else {
+            const port = $('#testSerialPort').val();
+            const baudRate = parseInt($('#testBaudRate').val());
+
+            if (!port) {
+                $('#notify').showAlert({message: '{{Veuillez sélectionner un port série}}', level: 'warning'});
+                return;
+            }
+
+            ajaxData.port = port;
+            ajaxData.baudRate = baudRate;
         }
 
         // Disable button and show loading
@@ -182,14 +299,9 @@ $(function() {
         $.ajax({
             type: 'POST',
             url: 'plugins/fidelixUpdater/core/ajax/fidelixUpdater.ajax.php',
-            data: {
-                action: 'testConnection',
-                port: port,
-                address: address,
-                baudRate: baudRate
-            },
+            data: ajaxData,
             dataType: 'json',
-            timeout: 15000, // 15 second timeout
+            timeout: 20000, // 20 second timeout (longer for TCP)
             success: function(data) {
                 $('#btnRunTest').prop('disabled', false).html('<i class="fas fa-play"></i> {{Lancer le test}}');
 
@@ -210,6 +322,11 @@ $(function() {
         // Show results section
         $('#testResultsSection').show();
 
+        // Determine connection type early
+        const diag = result.diagnostics || {};
+        const isTCP = (diag.connectionType === 'tcp' || diag.connectionType === 'tcp-transparent');
+        const isTransparent = (diag.connectionType === 'tcp-transparent');
+
         // Display overall status
         const alertClass = result.success ? 'alert-success' : 'alert-danger';
         const alertIcon = result.success ? 'fa-check-circle' : 'fa-exclamation-triangle';
@@ -218,8 +335,8 @@ $(function() {
             ? '{{La connexion au module Fidelix Multi24 fonctionne correctement.}}'
             : (result.error || '{{Impossible de se connecter au module.}}');
 
-        // Check if permissions fix is needed
-        const needsPermissionFix = !result.success && result.diagnostics && (
+        // Check if permissions fix is needed (only for RTU mode)
+        const needsPermissionFix = !isTCP && !result.success && diag && (
             !result.diagnostics.permissions?.wwwDataInDialout ||
             !result.diagnostics.port?.readable ||
             !result.diagnostics.port?.writable
@@ -253,8 +370,6 @@ $(function() {
         }, 100);
 
         // Display diagnostics
-        const diag = result.diagnostics || {};
-
         // Node.js
         if (diag.nodejs) {
             const nodejsStatus = diag.nodejs.installed
@@ -263,30 +378,61 @@ $(function() {
             $('#diag-nodejs').html(nodejsStatus);
         }
 
-        // Port série
-        if (diag.port) {
-            let portStatus = '';
-            if (!diag.port.exists) {
-                portStatus = `<span class="label label-danger"><i class="fas fa-times"></i> N'existe pas</span>`;
-            } else if (!diag.port.readable || !diag.port.writable) {
-                portStatus = `<span class="label label-warning"><i class="fas fa-exclamation-triangle"></i> Permissions insuffisantes</span>`;
-            } else {
-                portStatus = `<span class="label label-success"><i class="fas fa-check"></i> Accessible</span>`;
+        // Connection type
+        let connTypeLabel;
+        if (isTransparent) {
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-network-wired"></i> TCP Transparent (Raw)</span>`;
+        } else if (isTCP) {
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-network-wired"></i> TCP Modbus</span>`;
+        } else {
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-usb"></i> Série RTU</span>`;
+        }
+        $('#diag-connectionType').html(connTypeLabel);
+
+        // Show/hide rows based on connection type
+        if (isTCP) {
+            $('#diag-port-row').hide();
+            $('#diag-permissions-row').hide();
+            $('#diag-tcp-row').show();
+
+            // TCP info
+            if (diag.tcp) {
+                const tcpConnected = diag.tcpConnected;
+                const tcpStatus = tcpConnected
+                    ? `<span class="label label-success"><i class="fas fa-check"></i> Connecté</span>`
+                    : `<span class="label label-danger"><i class="fas fa-times"></i> Non connecté</span>`;
+                $('#diag-tcp').html(`${tcpStatus} <code>${diag.tcp.host}:${diag.tcp.port}</code>`);
             }
-            portStatus += ` <code>${diag.port.path}</code>`;
-            $('#diag-port').html(portStatus);
+        } else {
+            $('#diag-port-row').show();
+            $('#diag-permissions-row').show();
+            $('#diag-tcp-row').hide();
+
+            // Port série
+            if (diag.port) {
+                let portStatus = '';
+                if (!diag.port.exists) {
+                    portStatus = `<span class="label label-danger"><i class="fas fa-times"></i> N'existe pas</span>`;
+                } else if (!diag.port.readable || !diag.port.writable) {
+                    portStatus = `<span class="label label-warning"><i class="fas fa-exclamation-triangle"></i> Permissions insuffisantes</span>`;
+                } else {
+                    portStatus = `<span class="label label-success"><i class="fas fa-check"></i> Accessible</span>`;
+                }
+                portStatus += ` <code>${diag.port.path}</code>`;
+                $('#diag-port').html(portStatus);
+            }
+
+            // Permissions
+            if (diag.permissions) {
+                const permStatus = diag.permissions.wwwDataInDialout
+                    ? `<span class="label label-success"><i class="fas fa-check"></i> www-data dans groupe dialout</span>`
+                    : `<span class="label label-warning"><i class="fas fa-exclamation-triangle"></i> www-data pas dans groupe dialout</span>`;
+                $('#diag-permissions').html(permStatus);
+            }
         }
 
-        // Permissions
-        if (diag.permissions) {
-            const permStatus = diag.permissions.wwwDataInDialout
-                ? `<span class="label label-success"><i class="fas fa-check"></i> www-data dans groupe dialout</span>`
-                : `<span class="label label-warning"><i class="fas fa-exclamation-triangle"></i> www-data pas dans groupe dialout</span>`;
-            $('#diag-permissions').html(permStatus);
-        }
-
-        // Port opened
-        const portOpenedStatus = diag.portOpened
+        // Connection opened (works for both TCP and RTU)
+        const portOpenedStatus = (isTCP ? diag.tcpConnected : diag.portOpened)
             ? `<span class="label label-success"><i class="fas fa-check"></i> Oui</span>`
             : `<span class="label label-danger"><i class="fas fa-times"></i> Non</span>`;
         $('#diag-portOpened').html(portOpenedStatus);

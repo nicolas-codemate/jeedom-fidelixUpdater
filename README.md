@@ -16,6 +16,8 @@ Plugin Jeedom pour mettre à jour le firmware et le software des modules **Fidel
 - [Installation](#-installation)
 - [Utilisation](#-utilisation)
 - [Mode Pass-Through](#-mode-pass-through)
+- [Connexion TCP](#-connexion-tcp)
+- [Documentation technique](#-documentation-technique)
 - [Support](#-support)
 - [Licence](#-licence)
 
@@ -257,6 +259,76 @@ Mise à jour 3 :
 ✅ Accéder à des modules non directement connectés au bus Modbus principal
 ✅ Déploiement de mises à jour sur une architecture hiérarchisée
 ✅ Maintenance à distance de modules esclaves inaccessibles physiquement
+
+---
+
+## 🌐 Connexion TCP
+
+Le plugin supporte la connexion via un **convertisseur RS485-to-Ethernet** (ex: Waveshare) selon deux modes :
+
+### Mode TCP (Modbus TCP to RTU)
+
+```
+┌─────────┐     TCP/IP      ┌────────────────┐    RS485     ┌─────────┐
+│ Jeedom  │ ──────────────► │  Convertisseur │ ───────────► │ Fidelix │
+│         │   Modbus TCP    │  (conversion)  │  Modbus RTU  │         │
+└─────────┘                 └────────────────┘              └─────────┘
+```
+
+- Le convertisseur **traduit** Modbus TCP vers Modbus RTU
+- Gestion automatique du CRC par le convertisseur
+- ✅ Mise à jour Software | ❌ Mise à jour Firmware
+
+### Mode TCP Transparent (Raw/None)
+
+```
+┌─────────┐     TCP/IP      ┌────────────────┐    RS485     ┌─────────┐
+│ Jeedom  │ ──────────────► │  Convertisseur │ ───────────► │ Fidelix │
+│         │   Octets bruts  │  (passthrough) │  Octets bruts│         │
+└─────────┘                 └────────────────┘              └─────────┘
+```
+
+- Le convertisseur transmet les octets **sans modification**
+- L'application gère le format RTU et le CRC
+- ✅ Mise à jour Software | ✅ Mise à jour Firmware
+
+### Comparaison rapide
+
+| Mode | Software Update | Firmware Update | Configuration convertisseur |
+|------|-----------------|-----------------|----------------------------|
+| **TCP** | ✅ | ❌ | Protocol: Modbus TCP to RTU |
+| **TCP Transparent** | ✅ | ✅ | Protocol: None / Raw |
+
+📖 **Documentation complète** : [Connexion TCP via Convertisseur RS485-Ethernet](docs/fr_FR/connexion_tcp.md)
+
+---
+
+## 📖 Documentation technique
+
+Documentation détaillée pour les développeurs :
+
+| Document | Description |
+|----------|-------------|
+| [Connexion TCP](docs/fr_FR/connexion_tcp.md) | Modes de connexion TCP vs TCP Transparent |
+| [Architecture JavaScript](docs/fr_FR/architecture_javascript.md) | Structure des fichiers JS, couches et flux |
+| [Changelog](docs/fr_FR/changelog.md) | Historique des versions |
+
+### Architecture en couches
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    APPLICATION (PHP/Jeedom)                  │
+├─────────────────────────────────────────────────────────────┤
+│              COUCHE APPLICATION (FxMulti24/)                 │
+│     FxDevice | FxDeviceTCP | FxFwUpdate | FxSwUpdate        │
+├─────────────────────────────────────────────────────────────┤
+│                COUCHE PROTOCOLE (FxModbus/)                  │
+│          FxModbusRTUMaster  |  FxModbusTCPMaster            │
+├─────────────────────────────────────────────────────────────┤
+│                 COUCHE TRANSPORT (FxUtils/)                  │
+│            FxSerialPort  |  FxTcpSocket                     │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 

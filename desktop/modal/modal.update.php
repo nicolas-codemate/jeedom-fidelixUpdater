@@ -63,36 +63,74 @@ if (!isConnect('admin')) {
                 <small class="text-muted">{{Adresse du module à mettre à jour (ou du module maître si mode pass-through)}}</small>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="subaddressGroup">
                 <label>{{Sous-adresse (mode pass-through)}} <span class="text-muted">(Optionnel)</span></label>
                 <input type="number" class="form-control" id="deviceSubaddress" min="1" max="247" placeholder="">
-                <small class="text-muted">{{Si renseigné, la mise à jour se fera à travers le module maître (adresse principale) vers le module esclave (sous-adresse)}}</small>
+                <small class="text-muted" id="subaddressHelp">{{Si renseigné, la mise à jour se fera à travers le module maître (adresse principale) vers le module esclave (sous-adresse)}}</small>
+                <small class="text-warning" id="subaddressTcpWarning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    {{Le mode pass-through n'est pas disponible en TCP. Utilisez une connexion RTU pour mettre à jour un module via pass-through.}}
+                </small>
             </div>
 
             <div class="form-group">
-                <label>{{Port série}}</label>
-                <select class="form-control" id="serialPort">
-                    <?php
-                    $usbMapping = jeedom::getUsbMapping('', true);
-                    if (is_array($usbMapping)) {
-                        foreach ($usbMapping as $key => $value) {
-                            echo '<option value="' . $value . '">' . $key . ' (' . $value . ')</option>';
+                <label>{{Type de connexion}}</label>
+                <select class="form-control" id="connectionType">
+                    <option value="rtu">{{Série RTU}} (USB/RS485)</option>
+                    <option value="tcp">{{TCP Modbus}} (Convertisseur en mode Modbus TCP)</option>
+                    <option value="tcp-transparent">{{TCP Transparent}} (Convertisseur en mode None/Raw)</option>
+                </select>
+                <small class="text-muted" id="connectionTypeHelp"></small>
+            </div>
+
+            <!-- RTU Connection Options -->
+            <div id="rtuOptions">
+                <div class="form-group">
+                    <label>{{Port série}}</label>
+                    <select class="form-control" id="serialPort">
+                        <?php
+                        $usbMapping = jeedom::getUsbMapping('', true);
+                        if (is_array($usbMapping)) {
+                            foreach ($usbMapping as $key => $value) {
+                                echo '<option value="' . $value . '">' . $key . ' (' . $value . ')</option>';
+                            }
                         }
-                    }
-                    ?>
-                </select>
+                        ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>{{Vitesse de communication (Baud Rate)}}</label>
+                    <select class="form-control" id="baudRate">
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400" selected>38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                    <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>{{Vitesse de communication (Baud Rate)}}</label>
-                <select class="form-control" id="baudRate">
-                    <option value="9600">9600</option>
-                    <option value="19200">19200</option>
-                    <option value="38400" selected>38400</option>
-                    <option value="57600">57600</option>
-                    <option value="115200">115200</option>
-                </select>
-                <small class="text-muted">{{Doit correspondre à la configuration de l'automate (généralement 38400 pour Multi24)}}</small>
+            <!-- TCP Connection Options -->
+            <div id="tcpOptions" style="display: none;">
+                <div class="form-group">
+                    <label>{{Adresse IP du convertisseur}}</label>
+                    <input type="text" class="form-control" id="tcpHost" placeholder="192.168.1.100">
+                    <small class="text-muted">{{Adresse IP du convertisseur Modbus TCP (ex: Waveshare)}}</small>
+                </div>
+
+                <div class="form-group">
+                    <label>{{Port TCP}}</label>
+                    <input type="number" class="form-control" id="tcpPort" min="1" max="65535" value="502" placeholder="502">
+                    <small class="text-muted">{{Port TCP du convertisseur (4196 par défaut pour Waveshare, 502 pour Modbus standard)}}</small>
+                </div>
+
+                <div class="alert alert-warning" id="tcpFirmwareWarning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>{{Firmware non disponible en TCP}}</strong><br>
+                    {{La mise à jour du firmware utilise un protocole propriétaire Fidelix incompatible avec les convertisseurs Modbus TCP. Pour mettre à jour le firmware, veuillez utiliser une connexion série RTU (USB/RS485).}}
+                </div>
             </div>
 
             <div class="alert alert-info" style="margin-bottom: 15px;">
@@ -287,9 +325,88 @@ $(function() {
         });
     });
 
+    // Function to update firmware and pass-through availability based on connection type
+    function updateTcpLimitations(connectionType) {
+        const isTcpModbus = (connectionType === 'tcp');
+        const isTcpTransparent = (connectionType === 'tcp-transparent');
+        const isRtu = (connectionType === 'rtu');
+        const firmwareOption = $('#updateType option[value="m24firmware"]');
+        const currentUpdateType = $('#updateType').val();
+
+        // Update help text based on connection type
+        if (isTcpModbus) {
+            $('#connectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "Modbus TCP to RTU". Seul le software update direct est supporté.}}');
+        } else if (isTcpTransparent) {
+            $('#connectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "None" (Transparent). Toutes les fonctionnalités sont supportées.}}');
+        } else {
+            $('#connectionTypeHelp').text('');
+        }
+
+        if (isTcpModbus) {
+            // TCP Modbus mode: Disable firmware and pass-through
+            firmwareOption.prop('disabled', true);
+            firmwareOption.text('{{Firmware Multi24}} (.hex) - {{TCP Transparent ou RTU uniquement}}');
+
+            // If firmware was selected, switch to software
+            if (currentUpdateType === 'm24firmware') {
+                $('#updateType').val('m24software');
+                $('#tcpFirmwareWarning').show();
+            }
+
+            // Disable pass-through (subaddress)
+            $('#deviceSubaddress').prop('disabled', true).val('');
+            $('#subaddressHelp').hide();
+            $('#subaddressTcpWarning').show();
+        } else {
+            // RTU or TCP Transparent mode: Enable all features
+            firmwareOption.prop('disabled', false);
+            firmwareOption.text('{{Firmware Multi24}} (.hex)');
+            $('#tcpFirmwareWarning').hide();
+
+            // Enable pass-through (subaddress)
+            $('#deviceSubaddress').prop('disabled', false);
+            $('#subaddressHelp').show();
+            $('#subaddressTcpWarning').hide();
+        }
+    }
+
+    // Restore connection type from localStorage
+    const savedConnectionType = localStorage.getItem('fidelixUpdater_connectionType');
+    if (savedConnectionType) {
+        $('#connectionType').val(savedConnectionType);
+        if (savedConnectionType === 'tcp' || savedConnectionType === 'tcp-transparent') {
+            $('#rtuOptions').hide();
+            $('#tcpOptions').show();
+        }
+        updateTcpLimitations(savedConnectionType);
+    }
+
+    // Connection type change handler
+    $('#connectionType').on('change', function() {
+        const connectionType = $(this).val();
+        localStorage.setItem('fidelixUpdater_connectionType', connectionType);
+        if (connectionType === 'tcp' || connectionType === 'tcp-transparent') {
+            $('#rtuOptions').hide();
+            $('#tcpOptions').show();
+        } else {
+            $('#rtuOptions').show();
+            $('#tcpOptions').hide();
+        }
+        updateTcpLimitations(connectionType);
+    });
+
     // Update type change handler
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
+        const connectionType = $('#connectionType').val();
+
+        // Show/hide TCP firmware warning
+        if (connectionType === 'tcp' && updateType === 'm24firmware') {
+            $('#tcpFirmwareWarning').show();
+        } else {
+            $('#tcpFirmwareWarning').hide();
+        }
+
         // Note: Accept attribute is permissive (*) to support variable extensions like .hex-XXXX or .dat-XXXX
         // Validation is done server-side after upload
         if (updateType === 'm24firmware' || updateType === 'displayfirmware') {
@@ -325,27 +442,71 @@ $(function() {
             return;
         }
 
-        const port = $('#serialPort').val();
-        if (!port) {
-            showAlert('{{Veuillez sélectionner un port série}}', 'warning');
-            return;
-        }
-
-        const baudRate = parseInt($('#baudRate').val());
+        const connectionType = $('#connectionType').val();
         const method = $('#updateType').val();
+
+        // Validate connection-specific parameters
+        let port = null;
+        let baudRate = null;
+        let tcpHost = null;
+        let tcpPort = null;
+        const isTcpConnection = (connectionType === 'tcp' || connectionType === 'tcp-transparent');
+
+        if (isTcpConnection) {
+            tcpHost = $('#tcpHost').val();
+            tcpPort = parseInt($('#tcpPort').val());
+
+            if (!tcpHost) {
+                showAlert('{{Veuillez saisir l\'adresse IP du convertisseur}}', 'warning');
+                return;
+            }
+
+            // Basic IP validation
+            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipRegex.test(tcpHost)) {
+                showAlert('{{Adresse IP invalide}}', 'warning');
+                return;
+            }
+
+            if (!tcpPort || tcpPort < 1 || tcpPort > 65535) {
+                showAlert('{{Port TCP invalide (doit être entre 1 et 65535)}}', 'warning');
+                return;
+            }
+        } else {
+            port = $('#serialPort').val();
+            if (!port) {
+                showAlert('{{Veuillez sélectionner un port série}}', 'warning');
+                return;
+            }
+            baudRate = parseInt($('#baudRate').val());
+        }
 
         // Disable start button
         $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> {{Démarrage...}}');
 
         // Prepare AJAX data
+        // For backend, use 'tcp' as connectionType for both TCP modes
+        const backendConnectionType = isTcpConnection ? 'tcp' : 'rtu';
         const ajaxData = {
             action: 'startUpdate',
             address: address,
-            port: port,
-            baudRate: baudRate,
+            connectionType: backendConnectionType,
             filename: uploadedFilename,
             method: method
         };
+
+        // Add connection-specific parameters
+        if (isTcpConnection) {
+            ajaxData.tcpHost = tcpHost;
+            ajaxData.tcpPort = tcpPort;
+            // Add transparent mode flag for TCP Transparent
+            if (connectionType === 'tcp-transparent') {
+                ajaxData.transparentMode = true;
+            }
+        } else {
+            ajaxData.port = port;
+            ajaxData.baudRate = baudRate;
+        }
 
         // Add subaddress only if provided
         if (subaddress !== null) {
