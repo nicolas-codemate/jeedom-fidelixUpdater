@@ -52,9 +52,8 @@ $history = fidelixUpdater::getProcessHistory(50);
                     if ($connectionType === 'tcp' || $connectionType === 'tcp-transparent') {
                         $tcpHost = isset($process['tcpHost']) ? $process['tcpHost'] : '-';
                         $tcpPort = isset($process['tcpPort']) ? $process['tcpPort'] : '-';
-                        $modeLabel = ($connectionType === 'tcp-transparent') ? 'TCP Transparent' : 'TCP';
-                        $connectionInfo = '<i class="fas fa-network-wired" title="' . $modeLabel . '"></i> ' . htmlspecialchars($tcpHost) . ':' . htmlspecialchars($tcpPort);
-                        $connectionInfo .= ' <small class="text-muted">(' . $modeLabel . ')</small>';
+                        $connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' . htmlspecialchars($tcpHost) . ':' . htmlspecialchars($tcpPort);
+                        $connectionInfo .= ' <small class="text-muted">(TCP)</small>';
                     } else {
                         $portShort = isset($process['port']) ? basename($process['port']) : '-';
                         $connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' . htmlspecialchars($portShort);
@@ -200,14 +199,7 @@ $(document).ready(function() {
                     var typeLabel = typeLabels[process.type] || process.type;
 
                     // Build connection label
-                    var connectionLabel = '';
-                    if (process.connectionType === 'tcp-transparent') {
-                        connectionLabel = ' (TCP Transparent)';
-                    } else if (process.connectionType === 'tcp') {
-                        connectionLabel = ' (TCP)';
-                    } else {
-                        connectionLabel = ' (RTU)';
-                    }
+                    var connectionLabel = (process.connectionType === 'tcp' || process.connectionType === 'tcp-transparent') ? ' (TCP)' : ' (RTU)';
 
                     // Show modal
                     $('#md_viewLogs').dialog({

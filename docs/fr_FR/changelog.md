@@ -11,10 +11,10 @@
 ### Amelioration affichage historique et logs
 
 - Affichage du type de mise a jour detaille : Software M24, Firmware M24, Firmware Disp, Graphics Disp
-- Affichage du mode de connexion : RTU, TCP, TCP Transparent
 - Indicateur visuel du mode pass-through avec icone fleche
 - Titre du modal de logs enrichi avec type et mode de connexion
 - Logs Node.js avec banniere informative au demarrage (type, mode, adresse, host)
+- Logs Modbus detailles : TX/RX frames en hexadecimal, timeouts, exceptions
 
 ### Correction bug affichage des logs
 

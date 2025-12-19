@@ -347,6 +347,11 @@ function fxModbusTCPMaster() {
             frame[frameLength] = crc[0];     // CRC low byte
             frame[frameLength + 1] = crc[1]; // CRC high byte
 
+            var logMsg = "[Modbus RTU] TX: " + frame.toString('hex');
+            if (is_pass_through) {
+                logMsg += " (passthrough: master=" + address[0] + ", target=" + targetAddress + ")";
+            }
+            console.log(logMsg);
             fxLog.debug("doTransactionRTU: sending " + frame.toString('hex') + (is_pass_through ? " (passthrough)" : ""));
 
             // Send full frame (including master address if passthrough)
@@ -361,11 +366,14 @@ function fxModbusTCPMaster() {
             return getResponseRTU(addressToWait, response, expectedDataLength, msTimeout)
             .fail(function(err) {
                 self.timeoutCounter++;
+                console.log("[Modbus RTU] RX TIMEOUT after " + msTimeout + "ms (waiting for addr " + addressToWait + ")");
                 return Q.reject(err);
             });
         })
         // Check if response is valid
         .then(function() {
+            console.log("[Modbus RTU] RX: " + response.slice(0, expectedDataLength + 3).toString('hex'));
+
             // Decrement address in response if passthrough
             if (is_pass_through) {
                 response[0]--;
@@ -374,6 +382,7 @@ function fxModbusTCPMaster() {
             // Check for Modbus exception
             if (response[1] & 0x80) {
                 var exceptionCode = response[2];
+                console.log("[Modbus RTU] Exception code: " + exceptionCode);
                 return Q.reject("Modbus exception: " + exceptionCode);
             }
 
