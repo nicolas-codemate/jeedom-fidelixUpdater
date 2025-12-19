@@ -1,5 +1,13 @@
 # Changelog - Fidelix Updater
 
+## Version 1.1.1 - 2025-12-19
+
+### Correction bug affichage des logs
+
+- Correction du bug ou les logs se stackaient lors de la consultation de plusieurs processus dans l'historique
+- Chaque processus a maintenant ses propres fichiers de log separes (stdout et stderr)
+- Les logs Node.js sont desormais isoles par processus au lieu d'etre partages dans un fichier commun
+
 ## Version 1.1.0 - 2025-12-13
 
 ### Support Modbus TCP

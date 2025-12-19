@@ -247,9 +247,9 @@ class fidelixUpdater extends eqLogic {
             'lastUpdate' => date('c'),
             'endTime' => null,
             'error' => null,
-            // Log file paths for debugging
+            // Log file paths for debugging (per-process files)
             'logFiles' => array(
-                'nodejs' => isset($processData['nodejsLog']) ? $processData['nodejsLog'] : null,
+                'stdout' => isset($processData['stdoutLog']) ? $processData['stdoutLog'] : null,
                 'stderr' => isset($processData['stderrLog']) ? $processData['stderrLog'] : null
             )
         );
@@ -554,14 +554,20 @@ class fidelixUpdater extends eqLogic {
             }
         }
 
-        // Cleanup stderr log files (keep for 7 days for historical processes)
+        // Cleanup Node.js log files (keep for 7 days for historical processes)
+        // Includes both stderr (nodejs_<updateId>.log) and stdout (nodejs_stdout_<updateId>.log)
         $logsDir = self::getDataPath('logs');
         $oneWeekAgo = time() - (7 * 24 * 60 * 60); // 7 days
         if (is_dir($logsDir)) {
             $logFiles = scandir($logsDir);
             foreach ($logFiles as $file) {
-                if (strpos($file, 'nodejs_update_') === 0 && strpos($file, '.log') !== false) {
-                    $updateId = str_replace(array('nodejs_', '.log'), '', $file);
+                // Match both nodejs_<updateId>.log and nodejs_stdout_<updateId>.log
+                if (strpos($file, 'nodejs_') === 0 && strpos($file, '.log') !== false) {
+                    // Extract updateId from filename (handles both formats)
+                    $updateId = $file;
+                    $updateId = str_replace('nodejs_stdout_', '', $updateId);
+                    $updateId = str_replace('nodejs_', '', $updateId);
+                    $updateId = str_replace('.log', '', $updateId);
 
                     // Keep logs for active processes
                     if (in_array($updateId, $activeUpdateIds)) {
