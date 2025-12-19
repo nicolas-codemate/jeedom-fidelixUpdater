@@ -24,15 +24,8 @@ const fxFwUpdateTCP = require('./FxMulti24/').fxFwUpdateTCP();
 var FILETRANSFERDIR = path.normalize(__dirname + "/../../../data/filetransfer");  // PATCHED: Use relative path for portability (works in Docker and standard Jeedom)
 
 
-const logFilePath = path.resolve(__dirname, './logsJeedom.txt');
-
-// Create stream for log file
-const logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
-
-// Redirect console.log to log file
-console.log = function(message) {
-    logStream.write(message + '\n');
-};
+// Note: console.log output is captured by PHP via stdout redirection
+// No need to redirect to a file - let it go to stdout naturally
 
 // *******************************************************************
 // HELPER FUNCTIONS
@@ -206,16 +199,16 @@ function fxM24Update() {
 
     // Log header with all update info
     console.log('');
-    console.log('╔' + '═'.repeat(58) + '╗');
-    console.log('║  FIDELIX UPDATE - ' + typeLabel.padEnd(39) + '║');
-    console.log('║  Mode: ' + connectionLabel.padEnd(50) + '║');
-    console.log('║  Address: ' + passthroughLabel.padEnd(47) + '║');
+    console.log('============================================================');
+    console.log('  FIDELIX UPDATE - ' + typeLabel);
+    console.log('  Mode: ' + connectionLabel);
+    console.log('  Address: ' + passthroughLabel);
     if (isTCP) {
-      console.log('║  Host: ' + (options.host + ':' + options.tcpPort).padEnd(50) + '║');
+      console.log('  Host: ' + options.host + ':' + options.tcpPort);
     } else {
-      console.log('║  Port: ' + (options.port || '-').padEnd(50) + '║');
+      console.log('  Port: ' + (options.port || '-'));
     }
-    console.log('╚' + '═'.repeat(58) + '╝');
+    console.log('============================================================');
     console.log('');
 
     fxLog.debug('multi24update: Setting device params for ' + options.type);

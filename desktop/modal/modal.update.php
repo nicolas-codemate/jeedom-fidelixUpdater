@@ -485,12 +485,11 @@ $(function() {
         $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> {{Démarrage...}}');
 
         // Prepare AJAX data
-        // For backend, use 'tcp' as connectionType for both TCP modes
-        const backendConnectionType = isTcpConnection ? 'tcp' : 'rtu';
+        // Send actual connectionType ('rtu', 'tcp', or 'tcp-transparent')
         const ajaxData = {
             action: 'startUpdate',
             address: address,
-            connectionType: backendConnectionType,
+            connectionType: connectionType,
             filename: uploadedFilename,
             method: method
         };
@@ -499,10 +498,6 @@ $(function() {
         if (isTcpConnection) {
             ajaxData.tcpHost = tcpHost;
             ajaxData.tcpPort = tcpPort;
-            // Add transparent mode flag for TCP Transparent
-            if (connectionType === 'tcp-transparent') {
-                ajaxData.transparentMode = true;
-            }
         } else {
             ajaxData.port = port;
             ajaxData.baudRate = baudRate;
