@@ -41,6 +41,12 @@ class fidelixUpdater extends eqLogic {
         $return['progress_file'] = jeedom::getTmpFolder('fidelixUpdater') . '/dependancy';
         $return['state'] = 'ok';
 
+        // Check if installation is in progress
+        if (file_exists($return['progress_file'])) {
+            $return['state'] = 'in_progress';
+            return $return;
+        }
+
         // Check if NodeJS is installed
         exec('which node 2>&1', $output, $returnCode);
         if ($returnCode !== 0) {
@@ -65,6 +71,20 @@ class fidelixUpdater extends eqLogic {
             $return['state'] = 'nok';
             log::add('fidelixUpdater', 'debug', 'NodeJS version too old (need v20+, found ' . $version . ')');
             return $return;
+        }
+
+        // Check if npm dependencies are installed
+        $pluginPath = realpath(__DIR__ . '/../..');
+        $nodeModulesPath = $pluginPath . '/3rdparty/Fidelix/FxLib/node_modules';
+
+        // Check required modules: serialport, q, fs-extra
+        $requiredModules = array('serialport', 'q', 'fs-extra');
+        foreach ($requiredModules as $module) {
+            if (!file_exists($nodeModulesPath . '/' . $module)) {
+                $return['state'] = 'nok';
+                log::add('fidelixUpdater', 'debug', 'NPM module "' . $module . '" not found - run dependencies install');
+                return $return;
+            }
         }
 
         log::add('fidelixUpdater', 'debug', 'Dependencies check: OK');

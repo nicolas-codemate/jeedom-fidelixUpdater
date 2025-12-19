@@ -179,8 +179,45 @@ function fxM24Update() {
 
   // Execute software update
   this.update = function(filename, options) {
-        
-    console.log('multi24update: Setting device params for ' + options.type)
+
+    // Build descriptive labels for logging
+    var typeLabels = {
+      'm24software': 'Software Multi24',
+      'm24firmware': 'Firmware Multi24',
+      'displayfirmware': 'Firmware Display',
+      'displaygraphics': 'Graphics Display'
+    };
+    var typeLabel = typeLabels[options.type] || options.type;
+
+    // Determine connection type (RTU by default, TCP if specified)
+    // Note: 'tcp-transparent' is also TCP, just with transparent/raw mode enabled
+    const isTCP = options.connectionType === 'tcp' || options.connectionType === 'tcp-transparent';
+    var connectionLabel = 'RTU';
+    if (options.connectionType === 'tcp-transparent') {
+      connectionLabel = 'TCP Transparent';
+    } else if (options.connectionType === 'tcp') {
+      connectionLabel = 'TCP Modbus';
+    }
+
+    // Build passthrough info
+    var passthroughLabel = options.subaddress
+      ? 'Passthrough (' + options.address + ' -> ' + options.subaddress + ')'
+      : 'Direct (' + options.address + ')';
+
+    // Log header with all update info
+    console.log('');
+    console.log('╔' + '═'.repeat(58) + '╗');
+    console.log('║  FIDELIX UPDATE - ' + typeLabel.padEnd(39) + '║');
+    console.log('║  Mode: ' + connectionLabel.padEnd(50) + '║');
+    console.log('║  Address: ' + passthroughLabel.padEnd(47) + '║');
+    if (isTCP) {
+      console.log('║  Host: ' + (options.host + ':' + options.tcpPort).padEnd(50) + '║');
+    } else {
+      console.log('║  Port: ' + (options.port || '-').padEnd(50) + '║');
+    }
+    console.log('╚' + '═'.repeat(58) + '╝');
+    console.log('');
+
     fxLog.debug('multi24update: Setting device params for ' + options.type);
 
     try {
@@ -188,10 +225,6 @@ function fxM24Update() {
         console.log('multi24update: No module address defined...')
         throw('multi24update: No module address defined...');
       }
-
-      // Determine connection type (RTU by default, TCP if specified)
-      // Note: 'tcp-transparent' is also TCP, just with transparent/raw mode enabled
-      const isTCP = options.connectionType === 'tcp' || options.connectionType === 'tcp-transparent';
 
       if (isTCP) {
         // Validate TCP options
@@ -201,9 +234,6 @@ function fxM24Update() {
         if (!options.tcpPort) {
           throw('multi24update: No TCP port defined for TCP connection');
         }
-        console.log('multi24update: Using TCP connection to ' + options.host + ':' + options.tcpPort);
-      } else {
-        console.log('multi24update: Using RTU connection on port ' + options.port);
       }
 
       if ((options.type === 'm24software') || (options.type === 'm24firmware')) {

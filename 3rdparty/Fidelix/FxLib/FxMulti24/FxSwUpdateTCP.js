@@ -291,6 +291,14 @@ function fxSwUpdateTCP() {
             m_Options.responseTimeout = TCP_RESPONSE_TIMEOUT;
             m_FileBuffer = new Buffer( new Uint8Array(options.data) );
 
+            // Log connection mode information
+            var connectionMode = m_Options.transparentMode ? 'TCP Transparent' : 'TCP Modbus';
+            var passthroughInfo = m_Options.subaddress ? ' (passthrough: ' + m_Options.address + ' -> ' + m_Options.subaddress + ')' : ' (direct: ' + m_Options.address + ')';
+            console.log('='.repeat(60));
+            console.log('[FxSwUpdateTCP] Software Update - ' + connectionMode + passthroughInfo);
+            console.log('[FxSwUpdateTCP] Host: ' + m_Options.host + ':' + m_Options.tcpPort);
+            console.log('='.repeat(60));
+
             // Enable transparent mode if requested (for raw RTU over TCP)
             if (m_Options.transparentMode) {
                 self.setTransparentMode(true);
