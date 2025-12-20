@@ -332,20 +332,26 @@ function fxModbusTCPMaster() {
             frame[0] = address[0];
         }
 
-        // Add target address (increment by 1 if passthrough, per Fidelix protocol)
-        frame[offset] = is_pass_through ? targetAddress + 1 : targetAddress;
+        // Add target address (NOT incremented yet - CRC must be calculated first!)
+        frame[offset] = targetAddress;
 
         // Copy PDU
         pdu.copy(frame, offset + 1);
 
-        // Address to wait in response
+        // Address to wait in response (will be incremented)
         var addressToWait = is_pass_through ? targetAddress + 1 : targetAddress;
 
         // Calculate and append CRC (from offset for passthrough, 0 for direct)
+        // IMPORTANT: CRC is calculated BEFORE incrementing the address
         return self.getCRC(frame, offset, offset + 1 + pdu.length)
         .then(function(crc) {
             frame[frameLength] = crc[0];     // CRC low byte
             frame[frameLength + 1] = crc[1]; // CRC high byte
+
+            // NOW increment target address by 1 if passthrough (AFTER CRC calculation)
+            if (is_pass_through) {
+                frame[offset]++;
+            }
 
             var logMsg = "[Modbus RTU] TX: " + frame.toString('hex');
             if (is_pass_through) {
