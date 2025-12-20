@@ -165,16 +165,20 @@ function fxSwUpdateTCP() {
 
         function sendPacket(data, packet) {
             return (
-                self.sendSwPacket(data, packet)
-                .delay(TCP_INTER_PACKET_DELAY)
+                Q.resolve()
                 .then(function() {
-                    // Add extra delay every N packets to allow buffer flush to Display flash
+                    // Add buffer flush delay BEFORE sending packets at buffer boundaries
+                    // This gives the Multi24 time to flush its buffer to Display flash
                     if (packet > 0 && (packet % TCP_BUFFER_FLUSH_INTERVAL) === 0) {
-                        console.log('[FxSwUpdateTCP] Buffer flush pause at packet ' + packet + ' (waiting ' + TCP_BUFFER_FLUSH_DELAY + 'ms)');
+                        console.log('[FxSwUpdateTCP] Buffer flush pause BEFORE packet ' + packet + ' (waiting ' + TCP_BUFFER_FLUSH_DELAY + 'ms)');
                         return Q.delay(TCP_BUFFER_FLUSH_DELAY);
                     }
                     return Q.resolve();
                 })
+                .then(function() {
+                    return self.sendSwPacket(data, packet);
+                })
+                .delay(TCP_INTER_PACKET_DELAY)
                 .then(Q.fbind(notifyProgress, {progress : 10 + (80 * packet / m_TotalPacketCount)}))
                 .then(function() {
                     return (waitDeviceReady(packet));
