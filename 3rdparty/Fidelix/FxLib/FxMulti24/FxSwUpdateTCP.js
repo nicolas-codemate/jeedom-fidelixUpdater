@@ -37,8 +37,9 @@ const Q = require('q');
 const TCP_RESPONSE_TIMEOUT = 10000;             // Modbus response timeout
 const TCP_PORT_STABILIZATION_DELAY = 500;       // Delay after opening connection
 const TCP_PHASE_DELAY = 500;                    // Delay between update phases
-const TCP_PACKET_WAIT_TIMEOUT = 3000;           // Timeout waiting for packet counter
+const TCP_PACKET_WAIT_TIMEOUT = 10000;          // Timeout waiting for packet counter (increased for TCP latency)
 const TCP_NUM_OF_RETRIES = 10;                  // Number of retries for operations
+const TCP_INTER_PACKET_DELAY = 30;              // Delay between packets (ms) - simulates RTU serial timing
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -163,6 +164,7 @@ function fxSwUpdateTCP() {
         function sendPacket(data, packet) {
             return (
                 self.sendSwPacket(data, packet)
+                .delay(TCP_INTER_PACKET_DELAY)  // Delay to allow device buffer flush (simulates RTU timing)
                 .then(Q.fbind(notifyProgress, {progress : 10 + (80 * packet / m_TotalPacketCount)}))
                 .then(function() {
                     return (waitDeviceReady(packet));
