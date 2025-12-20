@@ -39,9 +39,9 @@ const TCP_PORT_STABILIZATION_DELAY = 500;       // Delay after opening connectio
 const TCP_PHASE_DELAY = 500;                    // Delay between update phases
 const TCP_PACKET_WAIT_TIMEOUT = 10000;          // Timeout waiting for packet counter (increased for TCP latency)
 const TCP_NUM_OF_RETRIES = 10;                  // Number of retries for operations
-const TCP_INTER_PACKET_DELAY = 5;               // Delay between packets (ms)
-const TCP_BUFFER_FLUSH_INTERVAL = 512;          // Flush buffer every N packets
-const TCP_BUFFER_FLUSH_DELAY = 10000;           // Delay for buffer flush (ms) - allows Multi24 to write to Display flash
+const TCP_INTER_PACKET_DELAY = 40;              // Delay between packets (ms) - simulates 38400 baud RTU timing
+const TCP_BUFFER_FLUSH_INTERVAL = 256;          // Flush buffer every N packets
+const TCP_BUFFER_FLUSH_DELAY = 500;             // Delay for buffer flush (ms) - must be < converter timeout
 
 // *******************************************************************
 // INTERFACE OBJECT
