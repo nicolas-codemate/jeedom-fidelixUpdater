@@ -39,7 +39,9 @@ const TCP_PORT_STABILIZATION_DELAY = 500;       // Delay after opening connectio
 const TCP_PHASE_DELAY = 500;                    // Delay between update phases
 const TCP_PACKET_WAIT_TIMEOUT = 10000;          // Timeout waiting for packet counter (increased for TCP latency)
 const TCP_NUM_OF_RETRIES = 10;                  // Number of retries for operations
-const TCP_INTER_PACKET_DELAY = 30;              // Delay between packets (ms) - simulates RTU serial timing
+const TCP_INTER_PACKET_DELAY = 5;               // Delay between packets (ms)
+const TCP_BUFFER_FLUSH_INTERVAL = 256;          // Flush buffer every N packets
+const TCP_BUFFER_FLUSH_DELAY = 2000;            // Delay for buffer flush (ms) - allows Multi24 to write to Display flash
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -164,7 +166,15 @@ function fxSwUpdateTCP() {
         function sendPacket(data, packet) {
             return (
                 self.sendSwPacket(data, packet)
-                .delay(TCP_INTER_PACKET_DELAY)  // Delay to allow device buffer flush (simulates RTU timing)
+                .delay(TCP_INTER_PACKET_DELAY)
+                .then(function() {
+                    // Add extra delay every N packets to allow buffer flush to Display flash
+                    if (packet > 0 && (packet % TCP_BUFFER_FLUSH_INTERVAL) === 0) {
+                        console.log('[FxSwUpdateTCP] Buffer flush pause at packet ' + packet + ' (waiting ' + TCP_BUFFER_FLUSH_DELAY + 'ms)');
+                        return Q.delay(TCP_BUFFER_FLUSH_DELAY);
+                    }
+                    return Q.resolve();
+                })
                 .then(Q.fbind(notifyProgress, {progress : 10 + (80 * packet / m_TotalPacketCount)}))
                 .then(function() {
                     return (waitDeviceReady(packet));
