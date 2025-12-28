@@ -155,11 +155,11 @@ function updateActiveProcessesTable(processes) {
 
         // Display connection info based on type
         var connectionInfo = '';
-        if (process.connectionType === 'tcp') {
-            connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' + process.tcpHost + ':' + process.tcpPort;
+        if (process.connectionType === 'tcp' || process.connectionType === 'tcp-transparent') {
+            connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' + process.tcpHost + ':' + process.tcpPort + ' <small class="text-muted">(TCP)</small>';
         } else {
             var portShort = process.port ? process.port.split('/').pop() : '-';
-            connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' + portShort;
+            connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' + portShort + ' <small class="text-muted">(RTU)</small>';
         }
         var typeLabel = 'Software';
         if (process.type === 'm24firmware') {

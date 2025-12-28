@@ -458,21 +458,20 @@ JSCODE;
         // Ensure logs directory exists
         fidelixUpdater::ensureDirectory(fidelixUpdater::getDataPath('logs'));
 
-        // Create stderr log file to capture Node.js errors
+        // Create log files to capture Node.js output (separate files per process)
         $stderrLog = fidelixUpdater::getDataPath('logs') . '/nodejs_' . $updateId . '.log';
+        $stdoutLog = fidelixUpdater::getDataPath('logs') . '/nodejs_stdout_' . $updateId . '.log';
         log::add('fidelixUpdater', 'debug', 'Node.js stderr will be captured in: ' . $stderrLog);
+        log::add('fidelixUpdater', 'debug', 'Node.js stdout will be captured in: ' . $stdoutLog);
 
         // Launch Node.js in BACKGROUND and capture PID
-        // IMPORTANT: Redirect stderr to log file instead of /dev/null to capture crashes
-        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > /dev/null 2> " . escapeshellarg($stderrLog) . " & echo $!";
+        // IMPORTANT: Redirect both stdout and stderr to separate log files per process
+        $cmd = system::getCmdSudo() . " /usr/bin/node " . escapeshellarg($scriptPath) . " > " . escapeshellarg($stdoutLog) . " 2> " . escapeshellarg($stderrLog) . " & echo $!";
         $pid = (int)trim(exec($cmd));
 
         log::add('fidelixUpdater', 'debug', 'Processus Node.js lancé en arrière-plan - PID: ' . $pid);
 
-        // Node.js console log path (shared by all processes)
-        $nodejsLog = fidelixUpdater::getPluginPath() . '/3rdparty/Fidelix/FxLib/logsJeedom.txt';
-
-        // Register process in registry with log file paths
+        // Register process in registry with log file paths (per-process logs)
         $processInfo = array(
             'updateId' => $updateId,
             'pid' => $pid,
@@ -482,7 +481,7 @@ JSCODE;
             'type' => $method,
             'filename' => basename($filename),
             'username' => $username,
-            'nodejsLog' => $nodejsLog,
+            'stdoutLog' => $stdoutLog,
             'stderrLog' => $stderrLog
         );
 
@@ -918,11 +917,9 @@ JSCODE;
             'jeedom' => ''
         );
 
-        // Read Node.js console log (logsJeedom.txt - shared file, may contain other processes)
-        if (isset($process['logFiles']['nodejs']) && file_exists($process['logFiles']['nodejs'])) {
-            $nodejsContent = file_get_contents($process['logFiles']['nodejs']);
-            // Try to extract only logs for this process (lines between process start and end)
-            $logs['nodejs'] = $nodejsContent; // For now, show full file (TODO: filter by updateId)
+        // Read Node.js stdout log (specific to this process)
+        if (isset($process['logFiles']['stdout']) && file_exists($process['logFiles']['stdout'])) {
+            $logs['nodejs'] = file_get_contents($process['logFiles']['stdout']);
         }
 
         // Read stderr log (specific to this process)

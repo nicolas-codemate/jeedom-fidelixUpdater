@@ -37,8 +37,11 @@ const Q = require('q');
 const TCP_RESPONSE_TIMEOUT = 10000;             // Modbus response timeout
 const TCP_PORT_STABILIZATION_DELAY = 500;       // Delay after opening connection
 const TCP_PHASE_DELAY = 500;                    // Delay between update phases
-const TCP_PACKET_WAIT_TIMEOUT = 3000;           // Timeout waiting for packet counter
+const TCP_PACKET_WAIT_TIMEOUT = 10000;          // Timeout waiting for packet counter (increased for TCP latency)
 const TCP_NUM_OF_RETRIES = 10;                  // Number of retries for operations
+const TCP_INTER_PACKET_DELAY = 40;              // Delay between packets (ms) - simulates 38400 baud RTU timing
+const TCP_BUFFER_FLUSH_INTERVAL = 256;          // Flush buffer every N packets
+const TCP_BUFFER_FLUSH_DELAY = 500;             // Delay for buffer flush (ms) - must be < converter timeout
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -162,7 +165,20 @@ function fxSwUpdateTCP() {
 
         function sendPacket(data, packet) {
             return (
-                self.sendSwPacket(data, packet)
+                Q.resolve()
+                .then(function() {
+                    // Add buffer flush delay BEFORE sending packets at buffer boundaries
+                    // This gives the Multi24 time to flush its buffer to Display flash
+                    if (packet > 0 && (packet % TCP_BUFFER_FLUSH_INTERVAL) === 0) {
+                        console.log('[FxSwUpdateTCP] Buffer flush pause BEFORE packet ' + packet + ' (waiting ' + TCP_BUFFER_FLUSH_DELAY + 'ms)');
+                        return Q.delay(TCP_BUFFER_FLUSH_DELAY);
+                    }
+                    return Q.resolve();
+                })
+                .then(function() {
+                    return self.sendSwPacket(data, packet);
+                })
+                .delay(TCP_INTER_PACKET_DELAY)
                 .then(Q.fbind(notifyProgress, {progress : 10 + (80 * packet / m_TotalPacketCount)}))
                 .then(function() {
                     return (waitDeviceReady(packet));
@@ -290,6 +306,14 @@ function fxSwUpdateTCP() {
             m_Options = options || {};
             m_Options.responseTimeout = TCP_RESPONSE_TIMEOUT;
             m_FileBuffer = new Buffer( new Uint8Array(options.data) );
+
+            // Log connection mode information
+            var connectionMode = m_Options.transparentMode ? 'TCP Transparent' : 'TCP Modbus';
+            var passthroughInfo = m_Options.subaddress ? ' (passthrough: ' + m_Options.address + ' -> ' + m_Options.subaddress + ')' : ' (direct: ' + m_Options.address + ')';
+            console.log('='.repeat(60));
+            console.log('[FxSwUpdateTCP] Software Update - ' + connectionMode + passthroughInfo);
+            console.log('[FxSwUpdateTCP] Host: ' + m_Options.host + ':' + m_Options.tcpPort);
+            console.log('='.repeat(60));
 
             // Enable transparent mode if requested (for raw RTU over TCP)
             if (m_Options.transparentMode) {

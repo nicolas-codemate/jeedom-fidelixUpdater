@@ -1,5 +1,33 @@
 # Changelog - Fidelix Updater
 
+## Version 1.1.1 - 2025-12-19
+
+### Correction mode pass-through en TCP Transparent
+
+- Correction du support pass-through en mode TCP Transparent (etait non fonctionnel)
+- La fonction `doTransactionRTU` gere maintenant correctement les adresses pass-through
+- Format de trame corrige : `[MasterAddr][TargetAddr+1][FC][Data][CRC]`
+
+### Amelioration affichage historique et logs
+
+- Affichage du type de mise a jour detaille : Software M24, Firmware M24, Firmware Disp, Graphics Disp
+- Indicateur visuel du mode pass-through avec icone fleche
+- Titre du modal de logs enrichi avec type et mode de connexion
+- Logs Node.js avec banniere informative au demarrage (type, mode, adresse, host)
+- Logs Modbus detailles : TX/RX frames en hexadecimal, timeouts, exceptions
+
+### Correction bug affichage des logs
+
+- Correction du bug ou les logs se stackaient lors de la consultation de plusieurs processus dans l'historique
+- Chaque processus a maintenant ses propres fichiers de log separes (stdout et stderr)
+- Les logs Node.js sont desormais isoles par processus au lieu d'etre partages dans un fichier commun
+
+### Amelioration verification des dependances
+
+- La verification des dependances inclut maintenant les modules npm (serialport, q, fs-extra)
+- Permet la detection automatique des modules manquants apres une mise a jour du plugin
+- Corrige le probleme ou le module "q" (requis pour TCP) n'etait pas installe automatiquement
+
 ## Version 1.1.0 - 2025-12-13
 
 ### Support Modbus TCP

@@ -49,18 +49,30 @@ $history = fidelixUpdater::getProcessHistory(50);
 
                     // Build connection info based on type
                     $connectionType = isset($process['connectionType']) ? $process['connectionType'] : 'rtu';
-                    if ($connectionType === 'tcp') {
+                    if ($connectionType === 'tcp' || $connectionType === 'tcp-transparent') {
                         $tcpHost = isset($process['tcpHost']) ? $process['tcpHost'] : '-';
                         $tcpPort = isset($process['tcpPort']) ? $process['tcpPort'] : '-';
                         $connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' . htmlspecialchars($tcpHost) . ':' . htmlspecialchars($tcpPort);
+                        $connectionInfo .= ' <small class="text-muted">(TCP)</small>';
                     } else {
                         $portShort = isset($process['port']) ? basename($process['port']) : '-';
                         $connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' . htmlspecialchars($portShort);
+                        $connectionInfo .= ' <small class="text-muted">(RTU)</small>';
                     }
-                    $typeLabel = $process['type'] === 'm24firmware' ? 'Firmware' : 'Software';
+
+                    // Build type label based on update type
+                    $typeLabels = array(
+                        'm24software' => 'Software M24',
+                        'm24firmware' => 'Firmware M24',
+                        'displayfirmware' => 'Firmware Disp',
+                        'displaygraphics' => 'Graphics Disp'
+                    );
+                    $typeLabel = isset($typeLabels[$process['type']]) ? $typeLabels[$process['type']] : $process['type'];
+
+                    // Build address label with passthrough indicator
                     $addressLabel = $process['address'];
                     if (!empty($process['subaddress'])) {
-                        $addressLabel .= ' → ' . $process['subaddress'];
+                        $addressLabel .= ' <i class="fas fa-arrow-right text-info" title="Pass-through"></i> ' . $process['subaddress'];
                     }
 
                     // Format dates
@@ -177,9 +189,21 @@ $(document).ready(function() {
                     $('#logContent_nodejs').text(logs.nodejs || '{{Aucun log Node.js disponible}}');
                     $('#logContent_jeedom').text(logs.jeedom || '{{Aucun log Jeedom disponible}}');
 
+                    // Build type label for modal title
+                    var typeLabels = {
+                        'm24software': 'Software M24',
+                        'm24firmware': 'Firmware M24',
+                        'displayfirmware': 'Firmware Display',
+                        'displaygraphics': 'Graphics Display'
+                    };
+                    var typeLabel = typeLabels[process.type] || process.type;
+
+                    // Build connection label
+                    var connectionLabel = (process.connectionType === 'tcp' || process.connectionType === 'tcp-transparent') ? ' (TCP)' : ' (RTU)';
+
                     // Show modal
                     $('#md_viewLogs').dialog({
-                        title: '{{Logs techniques}} - ' + (process.type === 'm24firmware' ? 'Firmware' : 'Software'),
+                        title: '{{Logs techniques}} - ' + typeLabel + connectionLabel,
                         width: 900,
                         height: 600,
                         modal: true,

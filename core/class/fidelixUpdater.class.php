@@ -41,6 +41,12 @@ class fidelixUpdater extends eqLogic {
         $return['progress_file'] = jeedom::getTmpFolder('fidelixUpdater') . '/dependancy';
         $return['state'] = 'ok';
 
+        // Check if installation is in progress
+        if (file_exists($return['progress_file'])) {
+            $return['state'] = 'in_progress';
+            return $return;
+        }
+
         // Check if NodeJS is installed
         exec('which node 2>&1', $output, $returnCode);
         if ($returnCode !== 0) {
@@ -65,6 +71,20 @@ class fidelixUpdater extends eqLogic {
             $return['state'] = 'nok';
             log::add('fidelixUpdater', 'debug', 'NodeJS version too old (need v20+, found ' . $version . ')');
             return $return;
+        }
+
+        // Check if npm dependencies are installed
+        $pluginPath = realpath(__DIR__ . '/../..');
+        $nodeModulesPath = $pluginPath . '/3rdparty/Fidelix/FxLib/node_modules';
+
+        // Check required modules: serialport, q, fs-extra
+        $requiredModules = array('serialport', 'q', 'fs-extra');
+        foreach ($requiredModules as $module) {
+            if (!file_exists($nodeModulesPath . '/' . $module)) {
+                $return['state'] = 'nok';
+                log::add('fidelixUpdater', 'debug', 'NPM module "' . $module . '" not found - run dependencies install');
+                return $return;
+            }
         }
 
         log::add('fidelixUpdater', 'debug', 'Dependencies check: OK');
@@ -247,9 +267,9 @@ class fidelixUpdater extends eqLogic {
             'lastUpdate' => date('c'),
             'endTime' => null,
             'error' => null,
-            // Log file paths for debugging
+            // Log file paths for debugging (per-process files)
             'logFiles' => array(
-                'nodejs' => isset($processData['nodejsLog']) ? $processData['nodejsLog'] : null,
+                'stdout' => isset($processData['stdoutLog']) ? $processData['stdoutLog'] : null,
                 'stderr' => isset($processData['stderrLog']) ? $processData['stderrLog'] : null
             )
         );
@@ -554,14 +574,20 @@ class fidelixUpdater extends eqLogic {
             }
         }
 
-        // Cleanup stderr log files (keep for 7 days for historical processes)
+        // Cleanup Node.js log files (keep for 7 days for historical processes)
+        // Includes both stderr (nodejs_<updateId>.log) and stdout (nodejs_stdout_<updateId>.log)
         $logsDir = self::getDataPath('logs');
         $oneWeekAgo = time() - (7 * 24 * 60 * 60); // 7 days
         if (is_dir($logsDir)) {
             $logFiles = scandir($logsDir);
             foreach ($logFiles as $file) {
-                if (strpos($file, 'nodejs_update_') === 0 && strpos($file, '.log') !== false) {
-                    $updateId = str_replace(array('nodejs_', '.log'), '', $file);
+                // Match both nodejs_<updateId>.log and nodejs_stdout_<updateId>.log
+                if (strpos($file, 'nodejs_') === 0 && strpos($file, '.log') !== false) {
+                    // Extract updateId from filename (handles both formats)
+                    $updateId = $file;
+                    $updateId = str_replace('nodejs_stdout_', '', $updateId);
+                    $updateId = str_replace('nodejs_', '', $updateId);
+                    $updateId = str_replace('.log', '', $updateId);
 
                     // Keep logs for active processes
                     if (in_array($updateId, $activeUpdateIds)) {

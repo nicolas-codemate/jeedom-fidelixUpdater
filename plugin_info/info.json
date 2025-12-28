@@ -1,7 +1,7 @@
 {
 	"id": "fidelixUpdater",
 	"name": "Fidelix Updater",
-	"pluginVersion": "1.1.0",
+	"pluginVersion": "1.1.1",
 	"description": {
 		"fr_FR": "Plugin pour mettre à jour le firmware et software des modules Fidelix Multi24 et Display via Modbus RTU ou TCP",
 		"en_US": "Plugin to update firmware and software of Fidelix Multi24 and Display modules via Modbus RTU or TCP"
@@ -13,8 +13,8 @@
 	"hasDependency": true,
 	"hasOwnDeamon": false,
 	"maxDependancyInstallTime": 10,
-	"changelog": "https://raw.githubusercontent.com/nicolas-codemate/jeedom-fidelixUpdater/main/docs/fr_FR/changelog.md",
-	"documentation": "https://github.com/nicolas-codemate/jeedom-fidelixUpdater/blob/main/docs/fr_FR/index.md",
+	"changelog": "https://raw.githubusercontent.com/nicolas-codemate/jeedom-fidelixUpdater/v1.1.1/docs/fr_FR/changelog.md",
+	"documentation": "https://github.com/nicolas-codemate/jeedom-fidelixUpdater/blob/v1.1.1/docs/fr_FR/index.md",
 	"link": {
 		"forum": "",
 		"video": ""
