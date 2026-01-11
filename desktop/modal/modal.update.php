@@ -69,7 +69,7 @@ if (!isConnect('admin')) {
                 <small class="text-muted" id="subaddressHelp">{{Si renseigné, la mise à jour se fera à travers le module maître (adresse principale) vers le module esclave (sous-adresse)}}</small>
                 <small class="text-warning" id="subaddressTcpWarning" style="display: none;">
                     <i class="fas fa-exclamation-triangle"></i>
-                    {{Le mode pass-through n'est pas disponible en TCP. Utilisez une connexion RTU pour mettre à jour un module via pass-through.}}
+                    {{Le mode pass-through n'est pas disponible en TCP Modbus. Utilisez TCP Transparent (convertisseur en mode Raw/None) ou une connexion RTU.}}
                 </small>
             </div>
 
@@ -135,7 +135,7 @@ if (!isConnect('admin')) {
                 <div class="alert alert-danger" id="tcpGraphicsWarning" style="display: none;">
                     <i class="fas fa-ban"></i>
                     <strong>{{Graphics Display non disponible en TCP Modbus}}</strong><br>
-                    {{La mise à jour Graphics Display nécessite le mode pass-through qui n'est pas supporté en TCP Modbus. Utilisez une connexion RTU (USB/RS485) ou TCP Transparent pour cette mise à jour.}}
+                    {{La mise à jour Graphics Display nécessite le mode pass-through qui n'est pas supporté en TCP Modbus. Utilisez TCP Transparent (convertisseur en mode Raw/None) ou une connexion RTU (USB/RS485).}}
                 </div>
             </div>
 
@@ -479,19 +479,19 @@ $(function() {
 
         // Block firmware update in TCP Modbus mode
         if (isTcpModbus && method === 'm24firmware') {
-            showAlert('{{La mise à jour firmware n\'est pas disponible en TCP Modbus. Utilisez RTU ou TCP Transparent.}}', 'danger');
+            showAlert('{{La mise à jour firmware n\'est pas disponible en TCP Modbus. Utilisez TCP Transparent (convertisseur en mode Raw/None) ou RTU.}}', 'danger');
             return;
         }
 
         // Block graphics display update in TCP Modbus mode
         if (isTcpModbus && method === 'displaygraphics') {
-            showAlert('{{La mise à jour Graphics Display n\'est pas disponible en TCP Modbus. Utilisez RTU ou TCP Transparent.}}', 'danger');
+            showAlert('{{La mise à jour Graphics Display n\'est pas disponible en TCP Modbus. Utilisez TCP Transparent (convertisseur en mode Raw/None) ou RTU.}}', 'danger');
             return;
         }
 
         // Block pass-through in TCP Modbus mode
         if (isTcpModbus && subaddress !== null) {
-            showAlert('{{Le mode pass-through n\'est pas disponible en TCP Modbus. Utilisez RTU ou TCP Transparent.}}', 'danger');
+            showAlert('{{Le mode pass-through n\'est pas disponible en TCP Modbus. Utilisez TCP Transparent (convertisseur en mode Raw/None) ou RTU.}}', 'danger');
             return;
         }
 
