@@ -16,6 +16,7 @@ const Q = require('q');
 //const WAIT_PATTERN_TIMEOUT = 2000;
 const NUM_OF_RETRIES = 10;  // PATCHED: Was 3, increased to 10 (ref: C# implementation)
 const PORT_STABILIZATION_DELAY = 500;  // PATCHED: Delay after serial port opening to ensure port is ready (ms)
+const PACKET_WAIT_TIMEOUT = 2000;  // PATCHED: Was 500ms, increased to 2000ms for more robustness
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -147,11 +148,11 @@ function fxSwUpdate() {
 
 		fxLog.trace("transferData");
 			
-		function waitDeviceReady(packet) {	
-					 
+		function waitDeviceReady(packet) {
+
 			return (
 				// Wait for packet counter
-				self.waitSwPacketCounter(packet, 500)
+				self.waitSwPacketCounter(packet, PACKET_WAIT_TIMEOUT)
 				.then(function() {
 					
 					// If last packet sent...
