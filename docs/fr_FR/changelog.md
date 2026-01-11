@@ -5,6 +5,9 @@
 ### Correction mode pass-through en TCP Transparent
 
 - Correction du support pass-through en mode TCP Transparent (etait non fonctionnel)
+- Refactoring transport abstraction pour TCP Transparent (plus robuste)
+- Augmentation du timeout RTU de 500ms a 2000ms (corrige erreurs intermittentes)
+- Interface : desactivation pass-through et graphics display en mode TCP Modbus (non supporte)
 
 ### Amelioration affichage historique et logs
 
