@@ -195,13 +195,21 @@ Stop Bits: 1
 
 ## Cas d'usage
 
-### Lecture de registres / Mise à jour Software
+### Lecture de registres / Mise à jour Software (direct)
 
-Pour les opérations standard (lecture de température, mise à jour software .M24IEC), les deux modes fonctionnent. Le **mode TCP** est recommandé car plus simple.
+Pour les opérations standard (lecture de température, mise à jour software .M24IEC en mode direct), les deux modes fonctionnent. Le **mode TCP** est recommandé car plus simple.
 
 ### Mise à jour Firmware
 
 Pour la mise à jour firmware (.hex), le **mode Transparent** est obligatoire car le protocole utilise des commandes propriétaires non-Modbus.
+
+### Mode Pass-through (mise à jour via un module maître)
+
+Pour mettre à jour un module esclave à travers un module maître (pass-through), le **mode Transparent** ou **Série** est obligatoire. Le mode TCP MBAP ne supporte pas le pass-through.
+
+### Mise à jour Graphics Display
+
+La mise à jour Graphics Display (.dat) nécessite le mode pass-through et donc le **mode Transparent** ou **Série**.
 
 ### Choix dans l'interface plugin
 
@@ -213,9 +221,18 @@ L'interface de mise à jour propose trois types de connexion :
 | **TCP** | Modbus TCP to RTU | Convertisseur en mode Modbus TCP |
 | **TCP Transparent** | Raw/None | Convertisseur en mode transparent |
 
+### Limitations du mode TCP (MBAP)
+
+| Fonctionnalité | TCP MBAP | TCP Transparent | Série |
+|----------------|:--------:|:---------------:|:-----:|
+| Software update (direct) | ✅ | ✅ | ✅ |
+| Firmware update | ❌ | ✅ | ✅ |
+| Pass-through | ❌ | ✅ | ✅ |
+| Graphics Display | ❌ | ✅ | ✅ |
+
 **Recommandation :**
-- Utilisez **TCP** pour la mise à jour software
-- Utilisez **TCP Transparent** pour la mise à jour firmware
+- Utilisez **TCP** pour la mise à jour software en mode direct uniquement
+- Utilisez **TCP Transparent** pour firmware, graphics display, ou pass-through
 - Utilisez **Série** si vous avez une connexion RS485 directe
 
 ---

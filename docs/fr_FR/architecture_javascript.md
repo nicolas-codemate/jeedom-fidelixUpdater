@@ -66,30 +66,34 @@ L'architecture suit un modèle en couches :
 │   ├── FxSerialPort.js                   # Gestion port série RS485
 │   ├── FxTcpSocket.js                    # Gestion socket TCP
 │   ├── FxSerial.js                       # Abstraction série
+│   ├── FxTransport.js                    # [NEW] Classe abstraite transport
+│   ├── FxTcpTransparent.js               # [NEW] Transport TCP transparent
 │   └── FxLog.js                          # Système de logging
 │
 ├── FxModbus/                             # COUCHE PROTOCOLE MODBUS
 │   ├── index.js                          # Export des modules
-│   ├── FxModbusRTUMaster.js              # Maître Modbus RTU (série)
-│   └── FxModbusTCPMaster.js              # Maître Modbus TCP (+transparent)
+│   ├── FxModbusRTUMaster.js              # Maître Modbus RTU (+ transport abstraction)
+│   └── FxModbusTCPMaster.js              # Maître Modbus TCP (MBAP uniquement)
 │
 ├── FxMulti24/                            # COUCHE APPLICATION FIDELIX
 │   ├── index.js                          # Export des modules
 │   ├── FxModuleInfo.js                   # Informations module Multi24
 │   │
-│   ├── FxDevice.js                       # Device série (RTU)
-│   ├── FxDeviceTCP.js                    # Device TCP (+transparent)
+│   ├── FxDevice.js                       # Device (RTU + TCP transparent via setTransportType)
+│   ├── FxDeviceTCP.js                    # [DEPRECATED] Device TCP MBAP
 │   │
-│   ├── FxFwUpdate.js                     # Firmware update série
-│   ├── FxFwUpdateTCP.js                  # Firmware update TCP
+│   ├── FxFwUpdate.js                     # Firmware update (RTU + TCP transparent)
+│   ├── FxFwUpdateTCP.js                  # [DEPRECATED] Firmware update TCP MBAP
 │   │
-│   ├── FxSwUpdate.js                     # Software update série
-│   └── FxSwUpdateTCP.js                  # Software update TCP
+│   ├── FxSwUpdate.js                     # Software update (RTU + TCP transparent)
+│   └── FxSwUpdateTCP.js                  # [DEPRECATED] Software update TCP MBAP
 │
 ├── FxM24Update.js                        # Point d'entrée principal
 ├── testConnection.js                     # Test connexion série
 └── testConnectionTCP.js                  # Test connexion TCP
 ```
+
+> **Note (2025-01)** : Les fichiers marqués `[DEPRECATED]` sont maintenus pour le mode TCP MBAP mais ne sont plus recommandés pour le mode TCP Transparent. Utilisez les classes RTU avec `setTransportType('tcp-transparent')` à la place.
 
 ---
 
@@ -139,6 +143,54 @@ Gestion du socket TCP pour les convertisseurs RS485-Ethernet.
 
 Système de logging configurable.
 
+### FxTransport.js (NEW - 2025-01)
+
+Classe abstraite de base pour l'abstraction des transports.
+
+```
+┌─────────────────────────────────────────┐
+│             FxTransport.js              │
+├─────────────────────────────────────────┤
+│ Interface commune pour transports :     │
+│ - open(connectionString, options)       │
+│ - close()                               │
+│ - write(buffer, offset, length)         │
+│ - waitResponse(pattern, length, timeout)│
+│ - isOpen (property)                     │
+├─────────────────────────────────────────┤
+│ Événements :                            │
+│ - 'receive', 'connect', 'disconnect'    │
+│ - 'error', 'open', 'close', 'write'     │
+├─────────────────────────────────────────┤
+│ Hérite de : EventEmitter                │
+└─────────────────────────────────────────┘
+```
+
+### FxTcpTransparent.js (NEW - 2025-01)
+
+Transport TCP transparent - wrapper autour de FxTcpSocket avec la même interface que FxSerial.
+
+```
+┌─────────────────────────────────────────┐
+│          FxTcpTransparent.js            │
+├─────────────────────────────────────────┤
+│ Responsabilités :                       │
+│ - Connexion TCP transparente            │
+│ - Même interface que FxSerial           │
+│ - Utilisé par FxModbusRTUMaster via     │
+│   setTransport()                        │
+├─────────────────────────────────────────┤
+│ Méthodes :                              │
+│ - open(host, options)                   │
+│ - close()                               │
+│ - write(buffer, offset, length)         │
+│ - getConnectionInfo()                   │
+├─────────────────────────────────────────┤
+│ Hérite de : FxTransport                 │
+│ Utilise : FxTcpSocket                   │
+└─────────────────────────────────────────┘
+```
+
 ---
 
 ## Couche Protocole Modbus (FxModbus)
@@ -147,7 +199,7 @@ Cette couche implémente le protocole Modbus dans ses variantes RTU et TCP.
 
 ### FxModbusRTUMaster.js
 
-Implémentation du maître Modbus RTU pour communication série.
+Implémentation du maître Modbus RTU pour communication série ou TCP transparent.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -167,8 +219,17 @@ Implémentation du maître Modbus RTU pour communication série.
 │ - writeSingleRegister()                 │
 │ - writeMultipleRegisters()              │
 │ - getCRC()                              │
+│                                         │
+│ Transport abstraction (NEW 2025-01) :   │
+│ - setTransport(transport)               │
+│   Injecte un transport externe          │
+│   (ex: FxTcpTransparent)                │
+│ - getTransport()                        │
+│ - hasExternalTransport()                │
+│ - isTransportOpen()                     │
 ├─────────────────────────────────────────┤
-│ Hérite de : FxSerialPort                │
+│ Hérite de : FxSerial                    │
+│ Peut utiliser : FxTcpTransparent        │
 └─────────────────────────────────────────┘
 ```
 
@@ -213,9 +274,9 @@ Implémentation du maître Modbus TCP avec support du mode transparent.
 
 Cette couche implémente les fonctionnalités spécifiques aux modules Fidelix Multi24.
 
-### FxDevice.js (Série)
+### FxDevice.js (Série + TCP Transparent)
 
-Device Fidelix pour communication série RS485.
+Device Fidelix pour communication série RS485 ou TCP transparent.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -241,12 +302,19 @@ Device Fidelix pour communication série RS485.
 │                                         │
 │ - getFwPageAddress()                    │
 │   Lecture de l'adresse page suivante    │
+│                                         │
+│ Transport abstraction (NEW 2025-01) :   │
+│ - setTransportType(type)                │
+│   type: 'serial' ou 'tcp-transparent'   │
+│ - getTransportType()                    │
 ├─────────────────────────────────────────┤
 │ Hérite de : FxModbusRTUMaster           │
 └─────────────────────────────────────────┘
 ```
 
-### FxDeviceTCP.js (TCP)
+### FxDeviceTCP.js (TCP) - DEPRECATED
+
+> **DEPRECATED (2025-01)** : Pour le mode TCP Transparent, utilisez `FxDevice.js` avec `setTransportType('tcp-transparent')`. Ce fichier est conservé uniquement pour le mode TCP MBAP.
 
 Device Fidelix pour communication TCP avec support des deux modes.
 
@@ -470,27 +538,62 @@ Note : Toutes les fonctionnalités disponibles
 
 ## Héritage des classes
 
+### Architecture actuelle (2025-01)
+
 ```
                     EventEmitter (Node.js)
                            │
-           ┌───────────────┴───────────────┐
-           │                               │
-    FxSerialPort                      FxTcpSocket
-           │                               │
-    FxModbusRTUMaster               FxModbusTCPMaster
-           │                               │
-       FxDevice                       FxDeviceTCP
-           │                               │
-    ┌──────┴──────┐                ┌───────┴───────┐
-    │             │                │               │
-FxFwUpdate   FxSwUpdate      FxFwUpdateTCP   FxSwUpdateTCP
+           ┌───────────────┼───────────────┐
+           │               │               │
+    FxSerialPort      FxTransport     FxTcpSocket
+           │               │               │
+           │        FxTcpTransparent       │
+           │               │               │
+    ┌──────┴───────────────┴───────┐       │
+    │                              │       │
+    │       FxModbusRTUMaster      │  FxModbusTCPMaster
+    │       (+ transport inject)   │       │
+    │              │               │       │
+    │          FxDevice ◄──────────┘       │
+    │    (setTransportType)                │
+    │              │                       │
+    │       ┌──────┴──────┐         FxDeviceTCP [DEPRECATED]
+    │       │             │                │
+    │   FxFwUpdate   FxSwUpdate      ┌─────┴─────┐
+    │                                │           │
+    │                          FxFwUpdateTCP  FxSwUpdateTCP
+    │                          [DEPRECATED]   [DEPRECATED]
+    └──────────────────────────────────────────────────────┘
+
+Flux recommandé pour TCP Transparent :
+  FxTcpTransparent → FxModbusRTUMaster → FxDevice → FxSwUpdate/FxFwUpdate
+
+Flux pour TCP MBAP (legacy) :
+  FxTcpSocket → FxModbusTCPMaster → FxDeviceTCP → FxSwUpdateTCP/FxFwUpdateTCP
 ```
 
 ---
 
 ## Configuration du mode transparent
 
-Pour activer le mode transparent dans le code :
+### Méthode recommandée (2025-01) - Transport Abstraction
+
+```javascript
+// Création du device avec transport TCP transparent
+const FxSwUpdate = require('./FxMulti24/').fxSwUpdate;
+const device = new FxSwUpdate();
+
+// Configuration du transport TCP transparent
+device.setTransportType('tcp-transparent');
+
+// Connexion (host comme premier paramètre, tcpPort dans options)
+await device.openConnection('192.168.1.100', { tcpPort: 502 });
+
+// Toutes les commandes fonctionnent (Modbus + propriétaires)
+await device.askBootVersion([0, 1]);
+```
+
+### Méthode legacy (FxDeviceTCP) - DEPRECATED
 
 ```javascript
 // Création du device
@@ -506,16 +609,18 @@ device.setTransparentMode(true);
 await device.askBootVersion([0, 1]);
 ```
 
-Pour les mises à jour, passer l'option `transparentMode: true` :
+### Pour les mises à jour via FxM24Update
+
+L'option `connectionType: 'tcp-transparent'` utilise automatiquement la nouvelle abstraction :
 
 ```javascript
 const options = {
+    connectionType: 'tcp-transparent',  // Utilise FxTcpTransparent
     host: '192.168.1.100',
     tcpPort: 502,
     address: 1,
-    transparentMode: true,  // Active le mode transparent
     data: firmwareBuffer
 };
 
-fxFwUpdateTCP.program(options);
+fxM24Update.update(filename, options);
 ```
