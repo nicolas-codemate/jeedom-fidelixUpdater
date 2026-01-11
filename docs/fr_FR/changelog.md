@@ -5,8 +5,6 @@
 ### Correction mode pass-through en TCP Transparent
 
 - Correction du support pass-through en mode TCP Transparent (etait non fonctionnel)
-- La fonction `doTransactionRTU` gere maintenant correctement les adresses pass-through
-- Format de trame corrige : `[MasterAddr][TargetAddr+1][FC][Data][CRC]`
 
 ### Amelioration affichage historique et logs
 
