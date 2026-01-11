@@ -2,6 +2,20 @@
 // Based on FxFwUpdate.js but uses TCP transport
 //
 // ============================================================================
+// DEPRECATION NOTICE (2025-01)
+// ============================================================================
+// For TCP TRANSPARENT mode, prefer using FxFwUpdate with the new transport
+// abstraction:
+//
+//   const device = new FxFwUpdate();
+//   device.setTransportType('tcp-transparent');
+//   device.program({ port: host, tcpPort: 502, ... });
+//
+// This file is kept for backward compatibility with TCP MBAP mode (standard
+// Modbus TCP with MBAP headers). It may be removed in a future version.
+// ============================================================================
+//
+// ============================================================================
 // TCP CONNECTION MODES
 // ============================================================================
 // This module supports two TCP connection modes:

@@ -128,8 +128,14 @@ if (!isConnect('admin')) {
 
                 <div class="alert alert-warning" id="tcpFirmwareWarning" style="display: none;">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <strong>{{Firmware non disponible en TCP}}</strong><br>
-                    {{La mise à jour du firmware utilise un protocole propriétaire Fidelix incompatible avec les convertisseurs Modbus TCP. Pour mettre à jour le firmware, veuillez utiliser une connexion série RTU (USB/RS485).}}
+                    <strong>{{Firmware non disponible en TCP Modbus}}</strong><br>
+                    {{La mise à jour du firmware utilise un protocole propriétaire Fidelix incompatible avec les convertisseurs Modbus TCP. Pour mettre à jour le firmware, veuillez utiliser une connexion série RTU (USB/RS485) ou TCP Transparent.}}
+                </div>
+
+                <div class="alert alert-danger" id="tcpGraphicsWarning" style="display: none;">
+                    <i class="fas fa-ban"></i>
+                    <strong>{{Graphics Display non disponible en TCP Modbus}}</strong><br>
+                    {{La mise à jour Graphics Display nécessite le mode pass-through qui n'est pas supporté en TCP Modbus. Utilisez une connexion RTU (USB/RS485) ou TCP Transparent pour cette mise à jour.}}
                 </div>
             </div>
 
@@ -325,32 +331,45 @@ $(function() {
         });
     });
 
-    // Function to update firmware and pass-through availability based on connection type
+    // Function to update firmware, graphics, and pass-through availability based on connection type
     function updateTcpLimitations(connectionType) {
         const isTcpModbus = (connectionType === 'tcp');
         const isTcpTransparent = (connectionType === 'tcp-transparent');
         const isRtu = (connectionType === 'rtu');
         const firmwareOption = $('#updateType option[value="m24firmware"]');
+        const graphicsOption = $('#updateType option[value="displaygraphics"]');
         const currentUpdateType = $('#updateType').val();
 
         // Update help text based on connection type
         if (isTcpModbus) {
-            $('#connectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "Modbus TCP to RTU". Seul le software update direct est supporté.}}');
+            $('#connectionTypeHelp').html('<span class="text-warning"><i class="fas fa-exclamation-triangle"></i> {{Le convertisseur doit être configuré en mode "Modbus TCP to RTU". Seul le software update direct est supporté (pas de pass-through, pas de firmware, pas de graphics display).}}</span>');
         } else if (isTcpTransparent) {
-            $('#connectionTypeHelp').text('{{Le convertisseur doit être configuré en mode "None" (Transparent). Toutes les fonctionnalités sont supportées.}}');
+            $('#connectionTypeHelp').html('<span class="text-success"><i class="fas fa-check-circle"></i> {{Le convertisseur doit être configuré en mode "None" (Transparent). Toutes les fonctionnalités sont supportées.}}</span>');
         } else {
             $('#connectionTypeHelp').text('');
         }
 
         if (isTcpModbus) {
-            // TCP Modbus mode: Disable firmware and pass-through
+            // TCP Modbus mode: Disable firmware, graphics display, and pass-through
             firmwareOption.prop('disabled', true);
             firmwareOption.text('{{Firmware Multi24}} (.hex) - {{TCP Transparent ou RTU uniquement}}');
+
+            graphicsOption.prop('disabled', true);
+            graphicsOption.text('{{Graphics Display}} (.dat) - {{TCP Transparent ou RTU uniquement}}');
 
             // If firmware was selected, switch to software
             if (currentUpdateType === 'm24firmware') {
                 $('#updateType').val('m24software');
                 $('#tcpFirmwareWarning').show();
+            } else {
+                $('#tcpFirmwareWarning').hide();
+            }
+
+            // If graphics was selected, show warning (but don't auto-switch to allow user to see the error)
+            if (currentUpdateType === 'displaygraphics') {
+                $('#tcpGraphicsWarning').show();
+            } else {
+                $('#tcpGraphicsWarning').hide();
             }
 
             // Disable pass-through (subaddress)
@@ -362,6 +381,10 @@ $(function() {
             firmwareOption.prop('disabled', false);
             firmwareOption.text('{{Firmware Multi24}} (.hex)');
             $('#tcpFirmwareWarning').hide();
+
+            graphicsOption.prop('disabled', false);
+            graphicsOption.text('{{Graphics Display}} (.dat)');
+            $('#tcpGraphicsWarning').hide();
 
             // Enable pass-through (subaddress)
             $('#deviceSubaddress').prop('disabled', false);
@@ -399,12 +422,20 @@ $(function() {
     $('#updateType').on('change', function() {
         const updateType = $(this).val();
         const connectionType = $('#connectionType').val();
+        const isTcpModbus = (connectionType === 'tcp');
 
         // Show/hide TCP firmware warning
-        if (connectionType === 'tcp' && updateType === 'm24firmware') {
+        if (isTcpModbus && updateType === 'm24firmware') {
             $('#tcpFirmwareWarning').show();
         } else {
             $('#tcpFirmwareWarning').hide();
+        }
+
+        // Show/hide TCP graphics warning
+        if (isTcpModbus && updateType === 'displaygraphics') {
+            $('#tcpGraphicsWarning').show();
+        } else {
+            $('#tcpGraphicsWarning').hide();
         }
 
         // Note: Accept attribute is permissive (*) to support variable extensions like .hex-XXXX or .dat-XXXX
@@ -444,6 +475,25 @@ $(function() {
 
         const connectionType = $('#connectionType').val();
         const method = $('#updateType').val();
+        const isTcpModbus = (connectionType === 'tcp');
+
+        // Block firmware update in TCP Modbus mode
+        if (isTcpModbus && method === 'm24firmware') {
+            showAlert('{{La mise à jour firmware n\'est pas disponible en TCP Modbus. Utilisez RTU ou TCP Transparent.}}', 'danger');
+            return;
+        }
+
+        // Block graphics display update in TCP Modbus mode
+        if (isTcpModbus && method === 'displaygraphics') {
+            showAlert('{{La mise à jour Graphics Display n\'est pas disponible en TCP Modbus. Utilisez RTU ou TCP Transparent.}}', 'danger');
+            return;
+        }
+
+        // Block pass-through in TCP Modbus mode
+        if (isTcpModbus && subaddress !== null) {
+            showAlert('{{Le mode pass-through n\'est pas disponible en TCP Modbus. Utilisez RTU ou TCP Transparent.}}', 'danger');
+            return;
+        }
 
         // Validate connection-specific parameters
         let port = null;

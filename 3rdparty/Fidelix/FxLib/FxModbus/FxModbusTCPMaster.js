@@ -3,6 +3,18 @@
 // TCP uses MBAP header instead of CRC
 //
 // ============================================================================
+// NOTE (2025-01): For TCP TRANSPARENT mode, prefer using FxModbusRTUMaster
+// with FxTcpTransparent transport (new abstraction layer). This file remains
+// for TCP MBAP mode (standard Modbus TCP with MBAP headers).
+//
+// Usage with new abstraction:
+//   const FxTcpTransparent = require('./FxUtils/').FxTcpTransparent;
+//   const modbus = new FxModbusRTUMaster();
+//   modbus.setTransport(new FxTcpTransparent());
+//   modbus.openConnection(host, { tcpPort: 502 });
+// ============================================================================
+//
+// ============================================================================
 // TRANSPARENT MODE SUPPORT - IMPLEMENTED (2024-12-17)
 // ============================================================================
 // This module supports two TCP connection modes:
@@ -353,12 +365,7 @@ function fxModbusTCPMaster() {
                 frame[offset]++;
             }
 
-            var logMsg = "[Modbus RTU] TX: " + frame.toString('hex');
-            if (is_pass_through) {
-                logMsg += " (passthrough: master=" + address[0] + ", target=" + targetAddress + ")";
-            }
-            console.log(logMsg);
-            fxLog.debug("doTransactionRTU: sending " + frame.toString('hex') + (is_pass_through ? " (passthrough)" : ""));
+            fxLog.debug("doTransactionRTU: TX " + frame.toString('hex') + (is_pass_through ? " (passthrough: " + address[0] + "->" + targetAddress + ")" : ""));
 
             // Send full frame (including master address if passthrough)
             return self.write(frame, 0, frame.length);
@@ -372,13 +379,13 @@ function fxModbusTCPMaster() {
             return getResponseRTU(addressToWait, response, expectedDataLength, msTimeout)
             .fail(function(err) {
                 self.timeoutCounter++;
-                console.log("[Modbus RTU] RX TIMEOUT after " + msTimeout + "ms (waiting for addr " + addressToWait + ")");
+                fxLog.warn("doTransactionRTU: RX TIMEOUT after " + msTimeout + "ms (waiting for addr " + addressToWait + ")");
                 return Q.reject(err);
             });
         })
         // Check if response is valid
         .then(function() {
-            console.log("[Modbus RTU] RX: " + response.slice(0, expectedDataLength + 3).toString('hex'));
+            fxLog.debug("doTransactionRTU: RX " + response.slice(0, expectedDataLength + 3).toString('hex'));
 
             // Decrement address in response if passthrough
             if (is_pass_through) {
@@ -388,7 +395,7 @@ function fxModbusTCPMaster() {
             // Check for Modbus exception
             if (response[1] & 0x80) {
                 var exceptionCode = response[2];
-                console.log("[Modbus RTU] Exception code: " + exceptionCode);
+                fxLog.warn("doTransactionRTU: Modbus exception code " + exceptionCode);
                 return Q.reject("Modbus exception: " + exceptionCode);
             }
 

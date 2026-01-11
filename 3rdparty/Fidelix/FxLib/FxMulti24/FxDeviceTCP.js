@@ -2,6 +2,20 @@
 // Based on FxDevice.js but uses TCP transport instead of RTU
 //
 // ============================================================================
+// DEPRECATION NOTICE (2025-01)
+// ============================================================================
+// For TCP TRANSPARENT mode, prefer using the RTU classes (FxDevice, FxSwUpdate,
+// FxFwUpdate) with the new transport abstraction:
+//
+//   const device = new FxDevice();
+//   device.setTransportType('tcp-transparent');
+//   device.openConnection(host, { tcpPort: 502 });
+//
+// This file is kept for backward compatibility with TCP MBAP mode (standard
+// Modbus TCP with MBAP headers). It may be removed in a future version.
+// ============================================================================
+//
+// ============================================================================
 // TCP CONNECTION MODES - TRANSPARENT MODE SUPPORT (IMPLEMENTED 2024-12-17)
 // ============================================================================
 // This module supports two TCP connection modes controlled by setTransparentMode():
