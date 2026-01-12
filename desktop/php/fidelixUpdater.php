@@ -159,7 +159,7 @@ function updateActiveProcessesTable(processes) {
             connectionInfo = '<i class="fas fa-network-wired" title="TCP"></i> ' + process.tcpHost + ':' + process.tcpPort + ' <small class="text-muted">(TCP)</small>';
         } else {
             var portShort = process.port ? process.port.split('/').pop() : '-';
-            connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' + portShort + ' <small class="text-muted">(RTU)</small>';
+            connectionInfo = '<i class="fas fa-plug" title="RTU Série"></i> ' + portShort + ' <small class="text-muted">(RTU)</small>';
         }
         var typeLabel = 'Software';
         if (process.type === 'm24firmware') {

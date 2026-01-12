@@ -385,7 +385,7 @@ $(function() {
         } else if (isTCP) {
             connTypeLabel = `<span class="label label-info"><i class="fas fa-network-wired"></i> TCP Modbus</span>`;
         } else {
-            connTypeLabel = `<span class="label label-info"><i class="fas fa-usb"></i> Série RTU</span>`;
+            connTypeLabel = `<span class="label label-info"><i class="fas fa-plug"></i> Série RTU</span>`;
         }
         $('#diag-connectionType').html(connTypeLabel);
 

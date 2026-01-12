@@ -56,7 +56,7 @@ $history = fidelixUpdater::getProcessHistory(50);
                         $connectionInfo .= ' <small class="text-muted">(TCP)</small>';
                     } else {
                         $portShort = isset($process['port']) ? basename($process['port']) : '-';
-                        $connectionInfo = '<i class="fas fa-usb" title="RTU"></i> ' . htmlspecialchars($portShort);
+                        $connectionInfo = '<i class="fas fa-plug" title="RTU Série"></i> ' . htmlspecialchars($portShort);
                         $connectionInfo .= ' <small class="text-muted">(RTU)</small>';
                     }
 

@@ -113,7 +113,8 @@ function fxModbusRTUMaster() {
 		if (m_ExternalTransport) {
 			return m_ExternalTransport.write(buffer, offset, length);
 		}
-		return fxModbusRTUMaster.super_.prototype.write.call(self, buffer, offset, length);
+		// Use inherited FxSerial.write via self (not prototype, as FxSerial defines write in constructor)
+		return self.write(buffer, offset, length);
 	}
 
 	// *******************************************************************
