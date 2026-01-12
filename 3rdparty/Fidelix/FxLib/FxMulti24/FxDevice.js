@@ -9,6 +9,7 @@ const util = require('util');
 const fxModbus = require('../FxModbus/').fxModbusRTUMaster;
 const fxModuleInfo = require('./FxModuleInfo.js');
 const fxLog = require('../FxUtils/').fxLog.configure({modulename: __filename});
+const FxTcpTransparent = require('../FxUtils/').FxTcpTransparent;
 const Q = require('q');
 
 // *******************************************************************
@@ -26,20 +27,55 @@ function fxDevice() {
 
 	// Request to create base class
 	fxDevice.super_.call(this);
-	
+
 	// *******************************************************************
 	// PRIVATE VARIABLES
 	// *******************************************************************
 	// In some callback context, this does not refer to fxSerial instance
 	// -> catch reference of this to self and use always self below
 	var self = this;
-		
+
+	// Transport type: 'serial' or 'tcp-transparent'
+	var m_TransportType = 'serial';
+
 	// *******************************************************************
 	// PUBLIC VARIABLES
-	// *******************************************************************	
+	// *******************************************************************
 	// *** Module identification properties ***
 	this.targetModule = new fxModuleInfo();
 	this.passThroughModule = new fxModuleInfo();
+
+	// *******************************************************************
+	// TRANSPORT CONFIGURATION
+	// *******************************************************************
+
+	/**
+	 * Configure the transport type.
+	 * Call this before openConnection().
+	 * @param {string} transportType - 'serial' or 'tcp-transparent'
+	 */
+	this.setTransportType = function(transportType) {
+		fxLog.debug('FxDevice.setTransportType: ' + transportType);
+
+		if (transportType === 'tcp-transparent') {
+			m_TransportType = 'tcp-transparent';
+			// Create and set TCP transparent transport
+			var tcpTransport = new FxTcpTransparent();
+			self.setTransport(tcpTransport);
+		} else {
+			m_TransportType = 'serial';
+			// Use inherited FxSerial (no external transport)
+			self.setTransport(null);
+		}
+	}
+
+	/**
+	 * Get the current transport type.
+	 * @returns {string} 'serial' or 'tcp-transparent'
+	 */
+	this.getTransportType = function() {
+		return m_TransportType;
+	}
 	
 	// *******************************************************************
 	// PRIVATE FUNCTIONS
@@ -127,7 +163,7 @@ function fxDevice() {
 				version = 0.0;
 				
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(self.isTransportOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'AskBootVersion: Invalid parameter (address)');
@@ -198,7 +234,7 @@ function fxDevice() {
 		return (
 			Q.fcall(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');				
+				assert(self.isTransportOpen(), 'Transport is not open');				
 			})
 			// Get transaction promise		
 			.then(Q.fbind(self.getTransactionPromise))
@@ -555,7 +591,7 @@ function fxDevice() {
 		return (
 			Q.fcall(function() {						
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(self.isTransportOpen(), 'Transport is not open');
 			})
 			// Get transaction promise		
 			.then(Q.fbind(self.getTransactionPromise))
@@ -595,7 +631,7 @@ function fxDevice() {
 		return (
 			Q.fcall(function() {						
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(self.isTransportOpen(), 'Transport is not open');
 			})
 			// Wait response
 			.then(function() {
@@ -647,7 +683,7 @@ function fxDevice() {
 		return (
 			Q.fcall(function() {						
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(self.isTransportOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert((typeof(pageData) == 'object'), 'ProgramFwPage: Invalid parameter (pageData)');				

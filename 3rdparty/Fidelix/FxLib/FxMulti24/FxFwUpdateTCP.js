@@ -2,6 +2,20 @@
 // Based on FxFwUpdate.js but uses TCP transport
 //
 // ============================================================================
+// DEPRECATION NOTICE (2025-01)
+// ============================================================================
+// For TCP TRANSPARENT mode, prefer using FxFwUpdate with the new transport
+// abstraction:
+//
+//   const device = new FxFwUpdate();
+//   device.setTransportType('tcp-transparent');
+//   device.program({ port: host, tcpPort: 502, ... });
+//
+// This file is kept for backward compatibility with TCP MBAP mode (standard
+// Modbus TCP with MBAP headers). It may be removed in a future version.
+// ============================================================================
+//
+// ============================================================================
 // TCP CONNECTION MODES
 // ============================================================================
 // This module supports two TCP connection modes:
@@ -32,12 +46,7 @@ const Q = require('q');
 const fs = require('fs-extra');
 const path = require('path');
 
-const logFilePath = path.resolve(__dirname, '../logsJeedom.txt');
-const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
-
-console.log = function(message) {
-    logStream.write(message + '\n');
-};
+// Note: console.log output is captured by PHP via stdout redirection
 
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS

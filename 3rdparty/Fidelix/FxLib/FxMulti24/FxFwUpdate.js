@@ -13,15 +13,7 @@ const fs = require('fs-extra');
 const path = require('path');
 
 
-const logFilePath = path.resolve(__dirname, '../logsJeedom.txt');
-
-// Créer un flux d'écriture pour écrire dans le fichier de log
-const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
-
-// Rediriger les sorties de console.log vers le fichier de log externe
-console.log = function(message) {
-    logStream.write(message + '\n');
-};
+// Note: console.log output is captured by PHP via stdout redirection
 
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS

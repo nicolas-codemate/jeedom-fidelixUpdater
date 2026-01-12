@@ -12,8 +12,12 @@ const path = require('path');
 
 
 const fxLog = require('./FxUtils/').fxLog.configure({modulename: __filename});
-const fxSwUpdate = require('./FxMulti24/').fxSwUpdate();
-const fxFwUpdate = require('./FxMulti24/').fxFwUpdate();
+
+// RTU classes - can now also work with TCP transparent transport
+const FxSwUpdate = require('./FxMulti24/').fxSwUpdate;
+const FxFwUpdate = require('./FxMulti24/').fxFwUpdate;
+
+// TCP MBAP classes - for standard Modbus TCP with MBAP headers
 const fxSwUpdateTCP = require('./FxMulti24/').fxSwUpdateTCP();
 const fxFwUpdateTCP = require('./FxMulti24/').fxFwUpdateTCP();
 
@@ -24,15 +28,8 @@ const fxFwUpdateTCP = require('./FxMulti24/').fxFwUpdateTCP();
 var FILETRANSFERDIR = path.normalize(__dirname + "/../../../data/filetransfer");  // PATCHED: Use relative path for portability (works in Docker and standard Jeedom)
 
 
-const logFilePath = path.resolve(__dirname, './logsJeedom.txt');
-
-// Create stream for log file
-const logStream = fs.createWriteStream(logFilePath, { flags: 'w' });
-
-// Redirect console.log to log file
-console.log = function(message) {
-    logStream.write(message + '\n');
-};
+// Note: console.log output is captured by PHP via stdout redirection
+// No need to redirect to a file - let it go to stdout naturally
 
 // *******************************************************************
 // HELPER FUNCTIONS
@@ -179,8 +176,45 @@ function fxM24Update() {
 
   // Execute software update
   this.update = function(filename, options) {
-        
-    console.log('multi24update: Setting device params for ' + options.type)
+
+    // Build descriptive labels for logging
+    var typeLabels = {
+      'm24software': 'Software Multi24',
+      'm24firmware': 'Firmware Multi24',
+      'displayfirmware': 'Firmware Display',
+      'displaygraphics': 'Graphics Display'
+    };
+    var typeLabel = typeLabels[options.type] || options.type;
+
+    // Determine connection type (RTU by default, TCP if specified)
+    // Note: 'tcp-transparent' is also TCP, just with transparent/raw mode enabled
+    const isTCP = options.connectionType === 'tcp' || options.connectionType === 'tcp-transparent';
+    var connectionLabel = 'RTU';
+    if (options.connectionType === 'tcp-transparent') {
+      connectionLabel = 'TCP Transparent';
+    } else if (options.connectionType === 'tcp') {
+      connectionLabel = 'TCP Modbus';
+    }
+
+    // Build passthrough info
+    var passthroughLabel = options.subaddress
+      ? 'Passthrough (' + options.address + ' -> ' + options.subaddress + ')'
+      : 'Direct (' + options.address + ')';
+
+    // Log header with all update info
+    console.log('');
+    console.log('============================================================');
+    console.log('  FIDELIX UPDATE - ' + typeLabel);
+    console.log('  Mode: ' + connectionLabel);
+    console.log('  Address: ' + passthroughLabel);
+    if (isTCP) {
+      console.log('  Host: ' + options.host + ':' + options.tcpPort);
+    } else {
+      console.log('  Port: ' + (options.port || '-'));
+    }
+    console.log('============================================================');
+    console.log('');
+
     fxLog.debug('multi24update: Setting device params for ' + options.type);
 
     try {
@@ -188,10 +222,6 @@ function fxM24Update() {
         console.log('multi24update: No module address defined...')
         throw('multi24update: No module address defined...');
       }
-
-      // Determine connection type (RTU by default, TCP if specified)
-      // Note: 'tcp-transparent' is also TCP, just with transparent/raw mode enabled
-      const isTCP = options.connectionType === 'tcp' || options.connectionType === 'tcp-transparent';
 
       if (isTCP) {
         // Validate TCP options
@@ -201,17 +231,28 @@ function fxM24Update() {
         if (!options.tcpPort) {
           throw('multi24update: No TCP port defined for TCP connection');
         }
-        console.log('multi24update: Using TCP connection to ' + options.host + ':' + options.tcpPort);
-      } else {
-        console.log('multi24update: Using RTU connection on port ' + options.port);
       }
 
       if ((options.type === 'm24software') || (options.type === 'm24firmware')) {
-        // Select RTU or TCP device based on connection type
-        if (isTCP) {
+        // Select device based on connection type
+        if (options.connectionType === 'tcp-transparent') {
+          // TCP transparent: use RTU classes with TCP transport
+          device = (options.type === 'm24software') ? new FxSwUpdate() : new FxFwUpdate();
+          device.setTransportType('tcp-transparent');
+          // For TCP transparent: port = host, and tcpPort is passed in options
+          options.port = options.host;
+          // Ensure tcpPort is available in options for openConnection
+          console.log('[FxM24Update] TCP Transparent mode: host=' + options.host + ', tcpPort=' + options.tcpPort);
+        } else if (options.connectionType === 'tcp') {
+          // TCP MBAP: use TCP classes
           device = (options.type === 'm24software') ? fxSwUpdateTCP : fxFwUpdateTCP;
         } else {
-          device = (options.type === 'm24software') ? fxSwUpdate : fxFwUpdate;
+          // RTU serial: use RTU classes with serial transport
+          device = new FxSwUpdate();
+          if (options.type === 'm24firmware') {
+            device = new FxFwUpdate();
+          }
+          device.setTransportType('serial');
         }
         device.targetModule.address = options.subaddress || options.address;
         device.passThroughModule.address = options.subaddress ? options.address : 0;
@@ -219,11 +260,22 @@ function fxM24Update() {
         device.passThroughModule.type = options.subaddress ? 'MULTI-24' : '';
       }
       else if ((options.type === 'displayfirmware') || (options.type === 'displaygraphics')) {
-        // Select RTU or TCP device based on connection type
-        if (isTCP) {
+        // Select device based on connection type
+        if (options.connectionType === 'tcp-transparent') {
+          // TCP transparent: use RTU classes with TCP transport
+          device = (options.type === 'displaygraphics') ? new FxSwUpdate() : new FxFwUpdate();
+          device.setTransportType('tcp-transparent');
+          // For TCP transparent: port = host, and tcpPort is passed in options
+          options.port = options.host;
+          // Ensure tcpPort is available in options for openConnection
+          console.log('[FxM24Update] TCP Transparent mode: host=' + options.host + ', tcpPort=' + options.tcpPort);
+        } else if (options.connectionType === 'tcp') {
+          // TCP MBAP: use TCP classes
           device = (options.type === 'displaygraphics') ? fxSwUpdateTCP : fxFwUpdateTCP;
         } else {
-          device = (options.type === 'displaygraphics') ? fxSwUpdate : fxFwUpdate;
+          // RTU serial: use RTU classes with serial transport
+          device = (options.type === 'displaygraphics') ? new FxSwUpdate() : new FxFwUpdate();
+          device.setTransportType('serial');
         }
         device.targetModule.address = options.subaddress || options.address;
         device.passThroughModule.address = options.subaddress ? options.address : 0;
@@ -376,12 +428,13 @@ function fxM24Update() {
                 }
 
                 // Try to end programming mode based on device type
-                if (device === fxSwUpdate) {
+                // Use instanceof for class check (works with new instances)
+                if (device instanceof FxSwUpdate || device === fxSwUpdateTCP) {
                     fxLog.debug("Attempting to end SW programming mode...");
                     return device.endSwProgramming().timeout(5000).catch(function(recoveryErr) {
                         fxLog.debug("Recovery: endSwProgramming failed: " + recoveryErr);
                     });
-                } else if (device === fxFwUpdate) {
+                } else if (device instanceof FxFwUpdate || device === fxFwUpdateTCP) {
                     fxLog.debug("Attempting to end FW programming mode...");
                     return device.endFwProgramming().timeout(5000).catch(function(recoveryErr) {
                         fxLog.debug("Recovery: endFwProgramming failed: " + recoveryErr);

@@ -27,13 +27,16 @@ function fxModbusRTUMaster() {
 
 	// Request to create base class
 	fxModbusRTUMaster.super_.call(this);
-	
+
 	// *******************************************************************
 	// PRIVATE VARIABLES
 	// *******************************************************************
 	// In some callback context, this does not refer to fxSerial instance
 	// -> catch reference of this to self and use always self below
 	var self = this;
+
+	// External transport (if set, used instead of inherited FxSerial)
+	var m_ExternalTransport = null;
 
 	// Transaction buffer
 	var m_TransactionQueue = [];
@@ -54,6 +57,66 @@ function fxModbusRTUMaster() {
 	this.crcErrorCounter = 0;
 	this.serialComErrorCounter = 0;
 	
+	// *******************************************************************
+	// TRANSPORT ABSTRACTION METHODS
+	// *******************************************************************
+
+	/**
+	 * Set an external transport to use instead of inherited FxSerial.
+	 * This enables using FxModbusRTUMaster with TCP transparent connections.
+	 * @param {FxTransport|FxTcpTransparent} transport - Transport instance
+	 */
+	this.setTransport = function(transport) {
+		fxLog.debug('setTransport: Setting external transport type=' + (transport ? transport.transportType : 'null'));
+		m_ExternalTransport = transport;
+
+		if (transport) {
+			// Forward transport events to this instance
+			transport.on('receive', (...args) => self.emit('receive', ...args));
+			transport.on('error', (...args) => self.emit('error', ...args));
+			transport.on('connect', (...args) => self.emit('connect', ...args));
+			transport.on('disconnect', (...args) => self.emit('disconnect', ...args));
+		}
+	}
+
+	/**
+	 * Get the current transport (external or internal FxSerial)
+	 * @returns {Object} - The active transport
+	 */
+	this.getTransport = function() {
+		return m_ExternalTransport || self;
+	}
+
+	/**
+	 * Check if using external transport
+	 * @returns {boolean}
+	 */
+	this.hasExternalTransport = function() {
+		return m_ExternalTransport !== null;
+	}
+
+	/**
+	 * Check if transport is open (public accessor for isOpen)
+	 * @returns {boolean}
+	 */
+	this.isTransportOpen = function() {
+		return m_ExternalTransport ? m_ExternalTransport.isOpen : self.isOpen;
+	}
+
+	// Helper to get isOpen status from correct source
+	function getIsOpen() {
+		return m_ExternalTransport ? m_ExternalTransport.isOpen : self.isOpen;
+	}
+
+	// Helper to write to correct transport
+	function transportWrite(buffer, offset, length) {
+		if (m_ExternalTransport) {
+			return m_ExternalTransport.write(buffer, offset, length);
+		}
+		// Use inherited FxSerial.write via self (not prototype, as FxSerial defines write in constructor)
+		return self.write(buffer, offset, length);
+	}
+
 	// *******************************************************************
 	// PRIVATE FUNCTIONS
 	// *******************************************************************
@@ -147,15 +210,15 @@ function fxModbusRTUMaster() {
 	/*private*/ function doTransaction(isPassThough, request, response, responseLength, msTimeout)
 	{
 		fxLog.trace("doTransaction...");
-		
+
 		// Increment trasaction counter
 		self.transactionCounter++;
-				
-		var l_AddressToWait = (isPassThough ? request[1] : request[0]);			
-		
+
+		var l_AddressToWait = (isPassThough ? request[1] : request[0]);
+
 		return (
 			// Send request
-			self.write(request, 0, request.length)
+			transportWrite(request, 0, request.length)
 			.fail(function (err) {self.serialComErrorCounter++; return Q.reject(err);})
 			// Wait response
 			.then(function() {
@@ -254,15 +317,15 @@ function fxModbusRTUMaster() {
 	/*private*/ function doEncapsulatedTransaction(isPassThough, request, response, msTimeout) {
 
 		fxLog.trace("doEncapsulatedTransaction...");
-		
+
 		// Increment trasaction counter
 		self.transactionCounter++;
 
-		var l_AddressToWait = (isPassThough ? request[1] : request[0]);	
-		
+		var l_AddressToWait = (isPassThough ? request[1] : request[0]);
+
 		return (
 			// Send request
-			self.write(request, 0, request.length)
+			transportWrite(request, 0, request.length)
 			.fail(function (err) {self.serialComErrorCounter++; return Q.reject(err);})
 			// Wait response
 			.then(function() {
@@ -339,9 +402,10 @@ function fxModbusRTUMaster() {
 	// INTERFACE FUNCTIONS
 	// *******************************************************************		
 
-	// Open serial port connection
-	/*public*/ this.openConnection = function(port, options) {	
-		
+	// Open connection (serial or external transport)
+	/*public*/ this.openConnection = function(port, options) {
+		options = options || {};
+
 		// Set response timeout
 		if (options.responseTimeout)
 			self.setResponseTimeout(options.responseTimeout);
@@ -351,11 +415,18 @@ function fxModbusRTUMaster() {
 		m_Closing = false;
 		m_TransactionQueue = [];
 
-		// Open connetion
+		// If external transport is set, use it to open connection
+		if (m_ExternalTransport) {
+			fxLog.debug('openConnection: Using external transport');
+			// For TCP transparent, port contains host and options contains port number
+			return m_ExternalTransport.open(port, options);
+		}
+
+		// Open connection using inherited FxSerial
 		return (self.open(port, options));
 	}
 
-	// Close serial port connection
+	// Close connection (serial or external transport)
 	/*public*/ this.closeConnection = function() {
 
 		// Set closing flag to prevent new transactions
@@ -365,7 +436,14 @@ function fxModbusRTUMaster() {
 		return (
 			self.waitForBusFree()
 			.delay(10)
-			.then(Q.fbind(self.close))
+			.then(function() {
+				// Close external transport if set
+				if (m_ExternalTransport) {
+					return m_ExternalTransport.close();
+				}
+				// Otherwise close inherited FxSerial
+				return self.close();
+			})
 		)
 	}
 
@@ -494,7 +572,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'writeMultipleRegisters: Invalid parameter (address)');
@@ -567,7 +645,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 			
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'writeSingleRegister: Invalid parameter (address)');
@@ -630,7 +708,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'writeMultipleCoils: Invalid parameter (address)');
@@ -703,7 +781,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 			
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'writeSingleCoil: Invalid parameter (address)');
@@ -766,7 +844,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'readHoldingRegisters: Invalid parameter (address)');
@@ -838,7 +916,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'readInputRegisters: Invalid parameter (address)');
@@ -910,7 +988,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'readHoldingRegisters: Invalid parameter (address)');
@@ -982,7 +1060,7 @@ function fxModbusRTUMaster() {
 			Q.resolve()
 			.then(function() {
 				// Check if port is open...
-				assert(self.isOpen, 'Serial port is not open');
+				assert(getIsOpen(), 'Transport is not open');
 
 				// Check parameters
 				assert(((typeof(address) == 'number') || (typeof(address) == 'object')), 'ReadDeviceIdentification: Invalid parameter (address)');			

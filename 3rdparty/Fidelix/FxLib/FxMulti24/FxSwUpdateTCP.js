@@ -2,6 +2,20 @@
 // Based on FxSwUpdate.js but uses TCP transport
 //
 // ============================================================================
+// DEPRECATION NOTICE (2025-01)
+// ============================================================================
+// For TCP TRANSPARENT mode, prefer using FxSwUpdate with the new transport
+// abstraction:
+//
+//   const device = new FxSwUpdate();
+//   device.setTransportType('tcp-transparent');
+//   device.program({ port: host, tcpPort: 502, ... });
+//
+// This file is kept for backward compatibility with TCP MBAP mode (standard
+// Modbus TCP with MBAP headers). It may be removed in a future version.
+// ============================================================================
+//
+// ============================================================================
 // TCP CONNECTION MODES
 // ============================================================================
 // This module supports two TCP connection modes:
@@ -37,7 +51,7 @@ const Q = require('q');
 const TCP_RESPONSE_TIMEOUT = 10000;             // Modbus response timeout
 const TCP_PORT_STABILIZATION_DELAY = 500;       // Delay after opening connection
 const TCP_PHASE_DELAY = 500;                    // Delay between update phases
-const TCP_PACKET_WAIT_TIMEOUT = 3000;           // Timeout waiting for packet counter
+const TCP_PACKET_WAIT_TIMEOUT = 10000;          // Timeout waiting for packet counter
 const TCP_NUM_OF_RETRIES = 10;                  // Number of retries for operations
 
 // *******************************************************************
@@ -290,6 +304,14 @@ function fxSwUpdateTCP() {
             m_Options = options || {};
             m_Options.responseTimeout = TCP_RESPONSE_TIMEOUT;
             m_FileBuffer = new Buffer( new Uint8Array(options.data) );
+
+            // Log connection mode information
+            var connectionMode = m_Options.transparentMode ? 'TCP Transparent' : 'TCP Modbus';
+            var passthroughInfo = m_Options.subaddress ? ' (passthrough: ' + m_Options.address + ' -> ' + m_Options.subaddress + ')' : ' (direct: ' + m_Options.address + ')';
+            console.log('='.repeat(60));
+            console.log('[FxSwUpdateTCP] Software Update - ' + connectionMode + passthroughInfo);
+            console.log('[FxSwUpdateTCP] Host: ' + m_Options.host + ':' + m_Options.tcpPort);
+            console.log('='.repeat(60));
 
             // Enable transparent mode if requested (for raw RTU over TCP)
             if (m_Options.transparentMode) {
