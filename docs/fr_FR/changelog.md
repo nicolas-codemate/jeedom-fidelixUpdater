@@ -1,5 +1,18 @@
 # Changelog - Fidelix Updater
 
+## Version 1.1.2 - 2026-03-30
+
+### Correction communication pass-through (RTU et TCP)
+
+- Correction du PHP qui ne transmettait jamais `connectionType: 'tcp-transparent'` au script Node.js, empechant le transport abstraction layer d'etre utilise
+- Ajout d'un error listener sur fxM24Update pour eviter les crashes `ERR_UNHANDLED_ERROR` qui rendaient les messages d'erreur illisibles
+- Augmentation des timeouts RTU pour fiabilite en mode pass-through :
+  - `PACKET_WAIT_TIMEOUT` : 500ms -> 5000ms (attente du packet counter pendant le transfert)
+  - `responseTimeout` : 5s -> 10s (timeout de chaque transaction Modbus)
+  - `WAIT_PATTERN_TIMEOUT` : 3s -> 5s (attente des reponses proprietaires Versio/Passth)
+- Augmentation des delais de setup boot mode : 50/500ms -> 100/1500ms (le device a besoin de temps pour passer en boot mode via la chaine pass-through)
+- Ajout de la validation cote serveur pour rejeter les combinaisons non supportees en TCP Modbus (pass-through, firmware, graphics display)
+
 ## Version 1.1.1 - 2025-12-19
 
 ### Correction mode pass-through en TCP Transparent
