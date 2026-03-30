@@ -15,7 +15,7 @@ const Q = require('q');
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
-const WAIT_PATTERN_TIMEOUT = 3000;  // PATCHED: Was 2000ms, increased to 3000ms (ref: C# implementation)
+const WAIT_PATTERN_TIMEOUT = 5000;  // PATCHED: Was 2000ms, increased to 5000ms for passthrough reliability (double hop adds latency)
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -320,19 +320,19 @@ function fxDevice() {
 		fxLog.debug("setupBootMode... PassThrough = " + setPassThroughModule + ", Target = " + setTargetModule);
 
 		// Setup pass-through device
-		function setupPassThroughDevice() {		
-					
+		function setupPassThroughDevice() {
+
 			return (
 				// Check if pass-through device is already in boot mode
 				askBootVersion(self.passThroughModule.address)
 				.fail(function() {
 					return (
-						// Little bit delay
-						Q.delay(50)
+						// Delay before boot mode command
+						Q.delay(100)
 						// Set pass-through device to the boot mode
 						.then(Q.fbind(sendBootModeCommand, true))
-						// Little bit delay for bootup mode setup
-						.delay(500)
+						// Delay for bootup mode setup (device needs time to enter boot mode)
+						.delay(1500)
 						// Ask boot version from pass-through device
 						.then(Q.fbind(askBootVersion, self.passThroughModule.address))
 					)
@@ -343,33 +343,33 @@ function fxDevice() {
 					if (version == "0.0") {
 						return Q.reject("Unable to set pass-through device to boot mode");
 					}
-					
+
 					return (Q.resolve(version));
 				})
-				// Little bit delay
-				.delay(50)
+				// Delay before pass-through command
+				.delay(100)
 				// Continue by setting device to the pass-through mode
 				.then(sendPassThroughCommand)
-				// Little bit delay
-				.delay(50)
+				// Delay after pass-through activation
+				.delay(100)
 				.catch(Q.reject)
 			)
 		}
 
 		// Setup target device
-		function setupTargetDevice() {		
-										
+		function setupTargetDevice() {
+
 			return (
 				// Check if target device is already in boot mode
 				askBootVersion([self.passThroughModule.address, self.targetModule.address])
 				.fail(function() {
 					return (
-						// Little bit delay
-						Q.delay(50)
+						// Delay before boot mode command
+						Q.delay(100)
 						// Set target device to the boot mode
 						.then(Q.fbind(sendBootModeCommand, false))
-						// Little bit delay for bootup mode setup
-						.delay(500)
+						// Delay for bootup mode setup (device needs time to enter boot mode)
+						.delay(1500)
 						// Ask boot version from target device
 						.then(Q.fbind(askBootVersion, [self.passThroughModule.address, self.targetModule.address]))
 					)

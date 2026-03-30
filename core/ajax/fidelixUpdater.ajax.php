@@ -268,6 +268,21 @@ try {
             throw new Exception('Méthode invalide (doit être m24firmware, m24software, displayfirmware ou displaygraphics) : ' . $method);
         }
 
+        // Server-side validation: TCP Modbus mode limitations
+        // TCP Modbus (non-transparent) does not support proprietary commands needed for
+        // firmware update, graphics display update, or pass-through mode
+        if ($connectionType === 'tcp') {
+            if ($subaddress !== null) {
+                throw new Exception('Le mode pass-through n\'est pas disponible en TCP Modbus. Utilisez TCP Transparent (convertisseur en mode Raw/None) ou une connexion RTU.');
+            }
+            if (in_array($method, array('m24firmware', 'displayfirmware'))) {
+                throw new Exception('La mise à jour firmware n\'est pas disponible en TCP Modbus. Utilisez TCP Transparent ou RTU.');
+            }
+            if ($method === 'displaygraphics') {
+                throw new Exception('La mise à jour Graphics Display n\'est pas disponible en TCP Modbus. Utilisez TCP Transparent ou RTU.');
+            }
+        }
+
         // Build full path to the firmware/software file
         $filePath = fidelixUpdater::getDataPath('filetransfer') . '/' . basename($filename);
         if (!file_exists($filePath)) {
@@ -337,7 +352,7 @@ try {
 
         if ($isTCP) {
             $transparentModeJs = $transparentMode ? 'true' : 'false';
-            $connectionOptionsJs = "    connectionType: 'tcp',\n" .
+            $connectionOptionsJs = "    connectionType: '{$connectionType}',\n" .
                                    "    host: '{$tcpHost}',\n" .
                                    "    tcpPort: {$tcpPort},\n" .
                                    "    transparentMode: {$transparentModeJs},";
@@ -432,6 +447,13 @@ function notifyPhpComplete() {
         }
     });
 }
+
+// Attach error listener to prevent ERR_UNHANDLED_ERROR crashes
+// Device errors are also propagated via promise rejections, this just prevents
+// the EventEmitter from throwing when 'error' events are emitted
+multi24Update.on('error', (err) => {
+    console.error('[fidelixUpdater] Device error event:', err);
+});
 
 // IMPORTANT: Using FULL ABSOLUTE path to firmware/software file
 multi24Update.update('{$filePath}', options)
