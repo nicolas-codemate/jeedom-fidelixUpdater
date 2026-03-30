@@ -16,7 +16,7 @@ const Q = require('q');
 //const WAIT_PATTERN_TIMEOUT = 2000;
 const NUM_OF_RETRIES = 10;  // PATCHED: Was 3, increased to 10 (ref: C# implementation)
 const PORT_STABILIZATION_DELAY = 500;  // PATCHED: Delay after serial port opening to ensure port is ready (ms)
-const PACKET_WAIT_TIMEOUT = 2000;  // PATCHED: Was 500ms, increased to 2000ms for more robustness
+const PACKET_WAIT_TIMEOUT = 5000;  // PATCHED: Was 500ms, increased to 5000ms for passthrough reliability (double hop adds ~100ms latency per transaction)
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -349,7 +349,7 @@ function fxSwUpdate() {
 		
 			// Update options
 			m_Options = options || {};
-			m_Options.responseTimeout = 5000;			
+			m_Options.responseTimeout = 10000;  // PATCHED: Was 5000ms, increased to 10000ms for passthrough reliability
 			m_FileBuffer = new Buffer( new Uint8Array(options.data) );
 			
 			m_Deferred = Q.defer();
