@@ -1,5 +1,13 @@
 # Changelog - Fidelix Updater
 
+## Version 1.1.3 - 2026-04-08
+
+### Corrections TCP Transparent
+
+- Correction du routage des commandes proprietaires qui echouaient en mode TCP Transparent ("Port is not open")
+- Correction de la gestion des evenements de deconnexion TCP (listeners detruits, reconnexion impossible)
+- Ajustement des delais adaptes au mode TCP (plus rapide que le serie, le device a besoin de plus de temps entre les phases)
+
 ## Version 1.1.2 - 2026-03-30
 
 ### Correction communication pass-through (RTU et TCP)

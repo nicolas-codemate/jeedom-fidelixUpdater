@@ -190,7 +190,7 @@ function fxDevice() {
 				}
 				
 				// Send raw data to the device
-				self.write(l_Buffer, l_Offset, (9 - l_Offset))
+				self.transportWrite(l_Buffer, l_Offset, (9 - l_Offset))
 				.then(function() {
 					// WAIT 'Vx.xx' -response from device where x.xx is numeric value
 					var l_PatternToWait = new Buffer(2);
@@ -244,7 +244,7 @@ function fxDevice() {
 				l_Buffer.write('Passth\0', 2);
 				
 				// Send raw data to the device
-				self.write(l_Buffer, l_Offset, (9 - l_Offset))			
+				self.transportWrite(l_Buffer, l_Offset, (9 - l_Offset))
 				// Wait response
 				.then(function() {
 					// WAIT "OK" -response from device
@@ -608,7 +608,7 @@ function fxDevice() {
 				}
 
 				// Send raw data to the device
-				self.write(l_Buffer, l_Offset, 10 - l_Offset)
+				self.transportWrite(l_Buffer, l_Offset, 10 - l_Offset)
 				// Get first page address as response
 				.then(self.getFwPageAddress)
 				.then(function(pageAddress) {
@@ -710,13 +710,13 @@ function fxDevice() {
 					})
 					// Program page
 					.then(function() {
-					
+
 						if (self.passThroughModule.address != 0) {
 							l_Buffer[1]++;
-							return self.write(l_Buffer, 0, l_PageSize + 4);
+							return self.transportWrite(l_Buffer, 0, l_PageSize + 4);
 						}
 						else
-							return self.write(l_Buffer, 1, l_PageSize + 3);
+							return self.transportWrite(l_Buffer, 1, l_PageSize + 3);
 					})
 				)
 			})
