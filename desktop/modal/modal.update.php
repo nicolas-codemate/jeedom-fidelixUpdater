@@ -18,6 +18,17 @@
 if (!isConnect('admin')) {
     throw new Exception('{{401 - Accès non autorisé}}');
 }
+
+// Check if Modbus plugin is installed, active, AND auto-stop is enabled
+$showModbusWarning = false;
+try {
+    $modbusPlugin = plugin::byId('modbus');
+    $modbusActive = is_object($modbusPlugin) && $modbusPlugin->isActive() == 1;
+    $autoStopEnabled = config::byKey('auto_stop_modbus', 'fidelixUpdater', 1) == 1;
+    $showModbusWarning = $modbusActive && $autoStopEnabled;
+} catch (Exception $e) {
+    $showModbusWarning = false;
+}
 ?>
 
 <div id="md_fidelixUpdater" style="padding: 20px;">
@@ -139,11 +150,13 @@ if (!isConnect('admin')) {
                 </div>
             </div>
 
+            <?php if ($showModbusWarning): ?>
             <div class="alert alert-info" style="margin-bottom: 15px;">
                 <i class="fas fa-info-circle"></i>
                 <strong>{{Plugin Modbus}}</strong> :
                 {{Le daemon du plugin Modbus sera automatiquement arrêté pendant la mise à jour et redémarré ensuite pour éviter les conflits d'accès au port série.}}
             </div>
+            <?php endif; ?>
 
             <div class="form-group">
                 <button class="btn btn-success btn-lg btn-block" id="btnStartUpdate">
