@@ -108,13 +108,26 @@ function fxModbusRTUMaster() {
 		return m_ExternalTransport ? m_ExternalTransport.isOpen : self.isOpen;
 	}
 
-	// Helper to write to correct transport
+	// Helper to write to correct transport (private, used by Modbus transactions)
 	function transportWrite(buffer, offset, length) {
 		if (m_ExternalTransport) {
 			return m_ExternalTransport.write(buffer, offset, length);
 		}
 		// Use inherited FxSerial.write via self (not prototype, as FxSerial defines write in constructor)
 		return self.write(buffer, offset, length);
+	}
+
+	/**
+	 * Write raw data to the active transport (external TCP or inherited serial).
+	 * Subclasses (e.g. FxDevice) must use this instead of self.write() for
+	 * proprietary commands so that TCP transparent mode routes correctly.
+	 * @param {Buffer} buffer - Data buffer
+	 * @param {number} offset - Start offset in buffer
+	 * @param {number} length - Number of bytes to write
+	 * @returns {Promise}
+	 */
+	this.transportWrite = function(buffer, offset, length) {
+		return transportWrite(buffer, offset, length);
 	}
 
 	// *******************************************************************

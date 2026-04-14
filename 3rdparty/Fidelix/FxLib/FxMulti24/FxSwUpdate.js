@@ -13,10 +13,18 @@ const Q = require('q');
 // *******************************************************************
 // INTERNAL OBJECTS/VARIABLES/DEFINITIONS
 // *******************************************************************
-//const WAIT_PATTERN_TIMEOUT = 2000;
-const NUM_OF_RETRIES = 10;  // PATCHED: Was 3, increased to 10 (ref: C# implementation)
-const PORT_STABILIZATION_DELAY = 500;  // PATCHED: Delay after serial port opening to ensure port is ready (ms)
-const PACKET_WAIT_TIMEOUT = 5000;  // PATCHED: Was 500ms, increased to 5000ms for passthrough reliability (double hop adds ~100ms latency per transaction)
+const NUM_OF_RETRIES = 10;
+
+// Timing constants (in milliseconds)
+// RTU serial is inherently slower, so shorter delays suffice.
+// TCP transparent is faster, so the device needs more time between phases.
+const TIMING = {
+	PORT_STABILIZATION_DELAY:        { serial: 500,  tcp: 500  },
+	PACKET_WAIT_TIMEOUT:             { serial: 5000, tcp: 5000 },
+	POST_PASSTHROUGH_DELAY:          { serial: 500,  tcp: 1000 },
+	POST_PHASE_DELAY:                { serial: 500,  tcp: 1000 },
+	POST_TRANSFER_DELAY:             { serial: 1000, tcp: 3000 },
+};
 
 // *******************************************************************
 // INTERFACE OBJECT
@@ -45,7 +53,14 @@ function fxSwUpdate() {
 	var m_FileBuffer = null;
 	var m_TotalRegCount = 0;
 	var m_TotalPacketCount = 0;
-	//let m_SendPacketCount = 0;
+
+	// Helper: pick the right timing value based on transport type
+	function timing(key) {
+		var entry = TIMING[key];
+		assert(entry, 'Unknown timing key: ' + key);
+		var isTcp = (self.getTransportType() === 'tcp-transparent');
+		return isTcp ? entry.tcp : entry.serial;
+	}
 		
 	// *******************************************************************
 	// PUBLIC VARIABLES
@@ -152,7 +167,7 @@ function fxSwUpdate() {
 
 			return (
 				// Wait for packet counter
-				self.waitSwPacketCounter(packet, PACKET_WAIT_TIMEOUT)
+				self.waitSwPacketCounter(packet, timing('PACKET_WAIT_TIMEOUT'))
 				.then(function() {
 					
 					// If last packet sent...
@@ -241,9 +256,13 @@ function fxSwUpdate() {
 			.then(function() {
 				console.log('[FxSwUpdate] Connection opened successfully');
 			})
-			.delay(PORT_STABILIZATION_DELAY)
 			.then(function() {
-				console.log('[FxSwUpdate] Port stabilized after ' + PORT_STABILIZATION_DELAY + 'ms delay');
+				var delay = timing('PORT_STABILIZATION_DELAY');
+				console.log('[FxSwUpdate] Waiting ' + delay + 'ms for port stabilization...');
+				return Q.delay(delay);
+			})
+			.then(function() {
+				console.log('[FxSwUpdate] Port stabilized');
 			})
 			// SET DEVICE TO THE PASS-THROUGH MODE
 			.then(function() {
@@ -269,7 +288,7 @@ function fxSwUpdate() {
 					console.log('[FxSwUpdate] Skipping pass-through mode (address is 0)');
 				}
 			})
-			.delay(500)  // PATCHED: Was 100ms, increased to 500ms for device stability
+			.then(function() { return Q.delay(timing('POST_PASSTHROUGH_DELAY')); })
 			// SET DEVICE TO THE PROGRAMMING MODE
 			.then(Q.fbind(notifyProgress, {status : "Setting up device to the programming mode...", progress : 7}))
 			.then(function() {
@@ -288,7 +307,7 @@ function fxSwUpdate() {
 					})
 				)
 			})
-			.delay(500)  // PATCHED: Was 100ms, increased to 500ms for device stability
+			.then(function() { return Q.delay(timing('POST_PHASE_DELAY')); })
 			// PROGRAM DEVICE
 			.then(Q.fbind(notifyProgress, {phase : "Programming", status : "Programming device... ", progress : 10}))
 			.then(function() {
@@ -296,11 +315,12 @@ function fxSwUpdate() {
 				return transferData();
 			})
 			.then(function() {
-				console.log('[FxSwUpdate] Data transfer completed successfully');
+				var delay = timing('POST_TRANSFER_DELAY');
+				console.log('[FxSwUpdate] Data transfer completed successfully, waiting ' + delay + 'ms for device finalization...');
+				return Q.delay(delay);
 			})
-			.delay(500)  // PATCHED: Was 100ms, increased to 500ms for device stability
 			// RESTORE DEVICE BACK TO THE NORMAL MODE
-			.then(Q.fbind(notifyProgress, {phase : "Finishing", status : "Restoring device back to the normal mode...", progress : 95}))		
+			.then(Q.fbind(notifyProgress, {phase : "Finishing", status : "Restoring device back to the normal mode...", progress : 95}))
 			.then(function() {
 
 				return (

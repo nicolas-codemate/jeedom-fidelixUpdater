@@ -49,23 +49,24 @@ function FxTcpTransparent() {
     // PRIVATE FUNCTIONS
     // *******************************************************************
 
-    // Handle disconnect event
+    // Handle disconnect event (guarded: FxTcpSocket emits both 'close' and
+    // 'disconnect', so this handler may fire twice — the null check prevents
+    // double-emit of 'disconnect' to upstream listeners).
     const onDisconnect = function(err) {
-        if (m_TcpSocket) {
-            m_TcpSocket.removeAllListeners();
-        }
+        if (!m_TcpSocket) return;
+
+        // Remove ALL listeners from the socket (including forwarding listeners
+        // for error, receive, etc. registered in open()) — safe because
+        // m_TcpSocket is about to be nulled and will not emit further.
+        m_TcpSocket.removeAllListeners();
+        m_TcpSocket = null;
 
         self.isOpen = false;
         self.emit('disconnect', err);
-        m_TcpSocket = null;
 
-        // Remove listeners on next tick
-        process.nextTick(self.removeAllListeners.bind(self));
-    }
-
-    // Handle connect event
-    const onConnect = function() {
-        self.isOpen = true;
+        // Note: do NOT call self.removeAllListeners() here — it would destroy
+        // listeners registered by FxModbusRTUMaster.setTransport(), making
+        // reconnection impossible (receive events would no longer propagate).
     }
 
     // *******************************************************************
@@ -117,19 +118,21 @@ function FxTcpTransparent() {
         // Create new TCP socket
         m_TcpSocket = new fxTcpSocket();
 
-        // Redirect TCP socket events
+        // Forward data and error events (simple pass-through)
         m_TcpSocket.on('error', (...args) => self.emit('error', ...args));
-        m_TcpSocket.on('connect', (...args) => self.emit('connect', ...args));
-        m_TcpSocket.on('disconnect', (...args) => self.emit('disconnect', ...args));
         m_TcpSocket.on('open', (...args) => self.emit('open', ...args));
-        m_TcpSocket.on('close', (...args) => self.emit('close', ...args));
         m_TcpSocket.on('write', (...args) => self.emit('write', ...args));
         m_TcpSocket.on('receive', (...args) => self.emit('receive', ...args));
 
-        // Catch disconnect event
+        // Connect: set isOpen flag before emitting so listeners see the correct state
+        m_TcpSocket.on('connect', function() {
+            self.isOpen = true;
+            self.emit('connect');
+        });
+
+        // Disconnect/close: cleanup handled by onDisconnect (which emits 'disconnect')
         m_TcpSocket.once('disconnect', onDisconnect);
         m_TcpSocket.once('close', onDisconnect);
-        m_TcpSocket.on('connect', onConnect);
 
         // Open TCP connection
         return m_TcpSocket.open(host, port, options)
