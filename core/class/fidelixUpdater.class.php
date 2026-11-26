@@ -148,6 +148,35 @@ class fidelixUpdater extends eqLogic {
     }
 
     /**
+     * Fidelix tooling names files by appending free text after the extension
+     * (e.g. "PASSTH-10-MULTI-DISP.dat-00_startpage_delay_-_29.10.2026"), so firmware
+     * and graphics files are recognized by the extension appearing anywhere in the name,
+     * like the Fidelix library does when it looks up the file to flash.
+     *
+     * @param string $filename
+     * @return bool
+     */
+    public static function isFirmwareFilename($filename) {
+        return stripos($filename, '.hex') !== false;
+    }
+
+    /**
+     * @param string $filename
+     * @return bool
+     */
+    public static function isSoftwareFilename($filename) {
+        return preg_match('/\.m24iec$/i', $filename) === 1;
+    }
+
+    /**
+     * @param string $filename
+     * @return bool
+     */
+    public static function isGraphicsFilename($filename) {
+        return stripos($filename, '.dat') !== false;
+    }
+
+    /**
      * Ensure directory exists and is writable, create if necessary
      *
      * @param string $path Directory path to ensure
@@ -620,8 +649,10 @@ class fidelixUpdater extends eqLogic {
             }
         }
 
-        // Cleanup uploaded firmware/software files (only if not in use by running process)
+        // Cleanup uploaded update files older than 24 hours (only if not in use by running process)
+        // Keeping them for a day lets the user retry a failed update without uploading the file again
         $filetransferDir = self::getDataPath('filetransfer');
+        $oneDayAgo = time() - (24 * 60 * 60);
         if (is_dir($filetransferDir)) {
             $uploadedFiles = scandir($filetransferDir);
             foreach ($uploadedFiles as $file) {
@@ -629,14 +660,18 @@ class fidelixUpdater extends eqLogic {
                     continue;
                 }
 
-                // Only delete .hex and .M24IEC files
-                $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-                if (in_array($ext, array('hex', 'm24iec'))) {
-                    // Check if file is currently being used by a running process
-                    if (!in_array($file, $activeFilenames)) {
-                        @unlink($filetransferDir . '/' . $file);
-                        $removed['uploads']++;
-                    }
+                $isUploadedUpdateFile = self::isFirmwareFilename($file)
+                    || self::isSoftwareFilename($file)
+                    || self::isGraphicsFilename($file);
+                if (!$isUploadedUpdateFile) {
+                    continue;
+                }
+
+                $uploadedFilePath = $filetransferDir . '/' . $file;
+                $isUploadedMoreThanOneDayAgo = filemtime($uploadedFilePath) < $oneDayAgo;
+                if ($isUploadedMoreThanOneDayAgo && !in_array($file, $activeFilenames)) {
+                    @unlink($uploadedFilePath);
+                    $removed['uploads']++;
                 }
             }
         }

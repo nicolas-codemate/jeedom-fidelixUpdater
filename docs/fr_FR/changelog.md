@@ -1,5 +1,14 @@
 # Changelog - Fidelix Updater
 
+## Version 1.1.4 - 2026-11-26
+
+### Correction de l'upload des fichiers
+
+- Les fichiers firmware et graphics dont le nom contient un point après l'extension (exemple : `PASSTH-10-MULTI-DISP.dat-00_startpage_delay_-_29.10.2026`) étaient refusés à l'upload. Le nom doit désormais seulement contenir `.hex` (firmware) ou `.dat` (graphics), comme le fait la bibliothèque Fidelix
+- Messages d'erreur d'upload clarifiés
+- Le nettoyage supprime désormais aussi les fichiers `.hex-XXXX` et `.dat*` uploadés, qui s'accumulaient dans `data/filetransfer`
+- Les fichiers uploadés sont conservés 24 h avant d'être supprimés, pour pouvoir relancer une mise à jour en échec sans réuploader le fichier
+
 ## Version 1.1.3 - 2026-04-08
 
 ### Corrections TCP Transparent
